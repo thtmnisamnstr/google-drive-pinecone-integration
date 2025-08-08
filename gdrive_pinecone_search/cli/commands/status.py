@@ -7,7 +7,7 @@ from ...utils.config_manager import ConfigManager
 from ...utils.connection_manager import ConnectionManager
 from ...utils.exceptions import ConfigurationError
 from ..ui.progress import (
-    show_status_panel, show_error_panel, show_connection_status,
+    show_status_panel, show_error_panel, show_success_panel, show_connection_status,
     show_configuration_summary, show_index_stats
 )
 

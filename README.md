@@ -39,13 +39,40 @@ gdrive-pinecone-search setup-owner \
   --credentials [path/to/gdrive-credentials.json] \
   --api-key [YOUR_PINECONE_API_KEY] \
   --index-name [index-name]
+
+# Set up with validation (recommended)
+gdrive-pinecone-search setup-owner \
+  --credentials [path/to/gdrive-credentials.json] \
+  --api-key [YOUR_PINECONE_API_KEY] \
+  --index-name [index-name] \
+  --validate
+
+# Set up using environment variables
+export GDRIVE_CREDENTIALS_JSON="path/to/gdrive-credentials.json"
+export PINECONE_API_KEY="YOUR_PINECONE_API_KEY"
+export PINECONE_INDEX_NAME="index-name"
+
+gdrive-pinecone-search setup-owner --validate
 ```
 
 #### Connected Mode (Read-Only)
 
 ```bash
-# Connect to existing Pinecone index
-gdrive-pinecone-search connect [index_name] --api-key [YOUR_PINECONE_API_KEY]
+# Connect to existing Pinecone index (explicit args)
+gdrive-pinecone-search connect \
+  --index-name [index-name] \
+  --api-key [YOUR_PINECONE_API_KEY]
+
+# Or connect with validation
+gdrive-pinecone-search connect \
+  --index-name [index-name] \
+  --api-key [YOUR_PINECONE_API_KEY] \
+  --validate
+
+# Or rely on environment/.env values
+export PINECONE_API_KEY="YOUR_PINECONE_API_KEY"
+export PINECONE_INDEX_NAME="index-name"
+gdrive-pinecone-search connect --validate
 ```
 
 ### 3. Index Your Documents
@@ -93,8 +120,7 @@ gdrive-pinecone-search search "team meeting notes" --interactive
 
 | Command | Description |
 |---------|-------------|
-| `setup-owner` | Configure owner mode with Google Drive credentials |
-| `setup-connected` | Configure connected mode with Pinecone credentials |
+| `setup-owner` | Configure owner mode with Google Drive and Pinecone credentials |
 
 ### Utility Commands
 
@@ -159,6 +185,8 @@ To use Pinecone for vector storage, follow these steps:
 
 ### Environment Variables
 
+You can use environment variables to avoid passing credentials on the command line:
+
 ```bash
 # Pinecone Configuration
 export PINECONE_API_KEY="your_pinecone_api_key"
@@ -171,6 +199,14 @@ export GDRIVE_CREDENTIALS_JSON="path/to/credentials.json"
 export EMBEDDING_MODEL="multilingual-e5-large"
 export CHUNK_SIZE="800"
 export CHUNK_OVERLAP="150"
+```
+
+Notes:
+- The CLI automatically loads a `.env` file at startup.
+- Precedence: CLI option > environment/.env > saved config.
+- When using environment variables, you can run `setup-owner` without command-line arguments:
+```bash
+gdrive-pinecone-search setup-owner --validate
 ```
 
 ### Configuration File
@@ -259,39 +295,39 @@ When using `--interactive`, you can:
 
 ```bash
 # Refresh files modified since last update
-gdrive-search refresh
+gdrive-pinecone-search refresh
 
 # Refresh files modified since specific date
-gdrive-search refresh --since 2024-01-15
+gdrive-pinecone-search refresh --since 2024-01-15
 
 # Force full refresh
-gdrive-search refresh --force-full
+gdrive-pinecone-search refresh --force-full
 ```
 
 ### Batch Processing
 
 ```bash
 # Process files in batches
-gdrive-search index --limit 50
+gdrive-pinecone-search index --limit 50
 
 # Process specific file types
-gdrive-search index --file-types docs
+gdrive-pinecone-search index --file-types docs
 
 # Dry run to preview
-gdrive-search index --dry-run
+gdrive-pinecone-search index --dry-run
 ```
 
 ### Connection Management
 
 ```bash
 # Check connection status
-gdrive-search status
+gdrive-pinecone-search status
 
 # Test all connections
-gdrive-search status --test-connections
+gdrive-pinecone-search status --test-connections
 
 # Show detailed configuration
-gdrive-search status --verbose
+gdrive-pinecone-search status --verbose
 ```
 
 ## API Rate Limits
@@ -333,19 +369,19 @@ The CLI provides comprehensive error handling:
 1. **Authentication Failed**
    ```bash
    # Check credentials
-   gdrive-search status --test-connections
+   gdrive-pinecone-search status --test-connections
    
    # Re-authenticate
-   gdrive-search setup-owner --credentials path/to/credentials.json
+   gdrive-pinecone-search setup-owner --credentials path/to/credentials.json
    ```
 
 2. **Index Not Found**
    ```bash
    # Check Pinecone configuration
-   gdrive-search status
+   gdrive-pinecone-search status
    
    # Reconnect to index
-   gdrive-search connect my-index --validate
+   gdrive-pinecone-search connect --index-name my-index --validate
    ```
 
 3. **Rate Limit Exceeded**
@@ -355,9 +391,8 @@ The CLI provides comprehensive error handling:
 ### Debug Mode
 
 ```bash
-# Enable verbose logging
-export GDRIVE_SEARCH_DEBUG=1
-gdrive-search status --verbose
+# Show verbose status output
+gdrive-pinecone-search status --verbose
 ```
 
 ## Development
@@ -365,7 +400,7 @@ gdrive-search status --verbose
 ### Project Structure
 
 ```
-gdrive_search/
+gdrive_pinecone_search/
 ├── cli/                    # Command-line interface
 │   ├── commands/          # Individual commands
 │   ├── ui/               # User interface components
@@ -397,7 +432,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For support and questions:
 - Check the troubleshooting section
-- Review the help command: `gdrive-search help`
+- Review the help command: `gdrive-pinecone-search help`
 - Open an issue on GitHub
 
 ## Roadmap

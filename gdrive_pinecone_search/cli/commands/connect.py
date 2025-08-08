@@ -2,6 +2,7 @@
 
 import click
 from typing import Optional
+from dotenv import load_dotenv
 
 from ...utils.config_manager import ConfigManager
 from ...utils.connection_manager import ConnectionManager
@@ -15,12 +16,13 @@ from ..ui.progress import show_status_panel, show_error_panel, show_success_pane
 
 
 @click.command()
-@click.argument('index_name')
+@click.option('--index-name', '-i',
+              help='Pinecone index name (or set PINECONE_INDEX_NAME env var)')
 @click.option('--validate', is_flag=True, 
               help='Validate index compatibility')
 @click.option('--api-key', '-k', 
               help='Pinecone API key (overrides environment variable)')
-def connect(index_name: str, validate: bool, api_key: Optional[str]):
+def connect(index_name: Optional[str], validate: bool, api_key: Optional[str]):
     """
     Connect to an existing Pinecone index.
     
@@ -28,10 +30,15 @@ def connect(index_name: str, validate: bool, api_key: Optional[str]):
     You can use this in "connected mode" to search an index that was created by someone else.
     
     Examples:
-            gdrive-pinecone-search connect my-company-index
-    gdrive-pinecone-search connect my-index --validate
+            gdrive-pinecone-search connect --index-name my-company-index
+    gdrive-pinecone-search connect --index-name my-index --validate
+    gdrive-pinecone-search connect --validate  # uses PINECONE_INDEX_NAME from environment
     """
     try:
+        # Ensure .env variables are loaded for this command as well
+        # This is safe to call multiple times and helps when this command is invoked directly.
+        load_dotenv()
+        
         # Initialize configuration
         config_manager = ConfigManager()
         
@@ -44,21 +51,30 @@ def connect(index_name: str, validate: bool, api_key: Optional[str]):
             )
             return
         
+        # Get index name from option, environment, or config
+        final_index_name = index_name or config_manager.get_pinecone_index_name()
+        if not final_index_name:
+            show_error_panel(
+                "Configuration Error",
+                "Pinecone index name not found. Use --index-name option or set PINECONE_INDEX_NAME environment variable."
+            )
+            return
+        
         # Initialize connection manager
         connection_manager = ConnectionManager(config_manager)
         
         # Validate connection
-        show_status_panel("Connecting", f"Validating connection to index '{index_name}'...")
+        show_status_panel("Connecting", f"Validating connection to index '{final_index_name}'...")
         
         try:
-            connection_manager.validate_pinecone_connection(pinecone_api_key, index_name)
-            show_success_panel("Connection Successful", f"Successfully connected to index '{index_name}'")
+            connection_manager.validate_pinecone_connection(pinecone_api_key, final_index_name)
+            show_success_panel("Connection Successful", f"Successfully connected to index '{final_index_name}'")
         except (AuthenticationError, IndexNotFoundError, IncompatibleIndexError) as e:
             show_error_panel("Connection Failed", str(e))
             return
         
         # Store connection configuration
-        config_manager.set_connection_config(pinecone_api_key, index_name)
+        config_manager.set_connection_config(pinecone_api_key, final_index_name)
         
         # Show connection status
         status = connection_manager.get_connection_status()
@@ -71,7 +87,7 @@ def connect(index_name: str, validate: bool, api_key: Optional[str]):
             try:
                 # Test a sample query
                 from ...services.pinecone_service import PineconeService
-                pinecone_service = PineconeService(pinecone_api_key, index_name)
+                pinecone_service = PineconeService(pinecone_api_key, final_index_name)
                 
                 # Get index stats
                 stats = pinecone_service.get_index_stats()
@@ -98,7 +114,7 @@ def connect(index_name: str, validate: bool, api_key: Optional[str]):
         
         show_success_panel(
             "Setup Complete", 
-            f"Successfully connected to Pinecone index '{index_name}'. You can now use the search command."
+            f"Successfully connected to Pinecone index '{final_index_name}'. You can now use the search command."
         )
         
     except Exception as e:

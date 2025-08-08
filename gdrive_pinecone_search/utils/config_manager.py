@@ -50,6 +50,7 @@ class ConfigManager:
         self.config: Optional[AppConfig] = None
         self._ensure_config_dir()
         self._load_config()
+        self._apply_env_overrides()
     
     def _ensure_config_dir(self):
         """Ensure the configuration directory exists."""
@@ -73,6 +74,30 @@ class ConfigManager:
         if self.config:
             with open(self.config_file, 'w') as f:
                 json.dump(self.config.dict(), f, indent=2, default=str)
+
+    def _apply_env_overrides(self):
+        """Apply environment variable overrides to in-memory settings.
+        This does not persist to disk; it only affects the current process.
+        """
+        if not self.config:
+            return
+        # Settings overrides
+        env_embedding_model = os.getenv("EMBEDDING_MODEL")
+        if env_embedding_model:
+            self.config.settings.embedding_model = env_embedding_model
+        env_chunk_size = os.getenv("CHUNK_SIZE")
+        if env_chunk_size:
+            try:
+                self.config.settings.chunk_size = int(env_chunk_size)
+            except ValueError:
+                # Ignore invalid values; keep existing
+                pass
+        env_chunk_overlap = os.getenv("CHUNK_OVERLAP")
+        if env_chunk_overlap:
+            try:
+                self.config.settings.chunk_overlap = int(env_chunk_overlap)
+            except ValueError:
+                pass
     
     def get_config(self) -> AppConfig:
         """Get the current configuration."""
@@ -150,7 +175,12 @@ class ConfigManager:
         return None
     
     def get_pinecone_index_name(self) -> Optional[str]:
-        """Get Pinecone index name from config."""
+        """Get Pinecone index name from environment or config."""
+        # Check environment variable first
+        env_index = os.getenv("PINECONE_INDEX_NAME")
+        if env_index:
+            return env_index
+        
         # Check owner config (owner mode)
         if self.config and self.config.owner_config:
             return self.config.owner_config.index_name

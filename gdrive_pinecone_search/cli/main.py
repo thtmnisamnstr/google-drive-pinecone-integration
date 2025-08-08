@@ -3,6 +3,7 @@
 import click
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 from ..utils.config_manager import ConfigManager
 from ..utils.exceptions import GDriveSearchError
@@ -28,11 +29,14 @@ def main(config):
     
     For more information, visit: https://github.com/your-repo/gdrive-pinecone-search
     """
+    # Load environment variables from .env file if it exists
+    load_dotenv()
     pass
 
 
 @main.command()
-@click.argument('index_name')
+@click.option('--index-name', '-i',
+              help='Pinecone index name (or set PINECONE_INDEX_NAME env var)')
 @click.option('--validate', is_flag=True, 
               help='Validate index compatibility')
 @click.option('--api-key', '-k', 
@@ -100,49 +104,121 @@ def help_cmd():
 
 
 @main.command()
-@click.option('--credentials', '-c', required=True,
-              help='Path to Google Drive credentials JSON file')
-@click.option('--api-key', '-k', required=True,
-              help='Pinecone API key')
-@click.option('--index-name', '-i', required=True,
-              help='Pinecone index name')
-def setup_owner(credentials, api_key, index_name):
+@click.option('--credentials', '-c',
+              help='Path to Google Drive credentials JSON file (or set GDRIVE_CREDENTIALS_JSON env var)')
+@click.option('--api-key', '-k',
+              help='Pinecone API key (or set PINECONE_API_KEY env var)')
+@click.option('--index-name', '-i',
+              help='Pinecone index name (or set PINECONE_INDEX_NAME env var)')
+@click.option('--validate', is_flag=True,
+              help='Validate connections after setup')
+def setup_owner(credentials, api_key, index_name, validate):
     """Set up owner mode with Google Drive and Pinecone credentials."""
+    import os
+    from .ui.progress import show_status_panel, show_success_panel, show_error_panel, show_connection_status
+    from ..utils.connection_manager import ConnectionManager
+    from ..utils.exceptions import AuthenticationError, IndexNotFoundError, IncompatibleIndexError
+    
     try:
-        config_manager = ConfigManager()
-        config_manager.set_owner_config(credentials, api_key, index_name)
         
-        from ..ui.progress import show_success_panel
+        # Get values from command line or environment variables
+        credentials_path = credentials or os.getenv('GDRIVE_CREDENTIALS_JSON')
+        pinecone_api_key = api_key or os.getenv('PINECONE_API_KEY')
+        pinecone_index_name = index_name or os.getenv('PINECONE_INDEX_NAME')
+        
+        # Validate that we have all required values
+        if not credentials_path:
+            show_error_panel("Configuration Error", 
+                "Google Drive credentials not provided. Use --credentials option or set GDRIVE_CREDENTIALS_JSON environment variable.")
+            return
+        
+        if not pinecone_api_key:
+            show_error_panel("Configuration Error", 
+                "Pinecone API key not provided. Use --api-key option or set PINECONE_API_KEY environment variable.")
+            return
+        
+        if not pinecone_index_name:
+            show_error_panel("Configuration Error", 
+                "Pinecone index name not provided. Use --index-name option or set PINECONE_INDEX_NAME environment variable.")
+            return
+        
+        # Initialize configuration
+        config_manager = ConfigManager()
+        
+        # Store the configuration first
+        show_status_panel("Configuration", "Storing credentials...")
+        config_manager.set_owner_config(credentials_path, pinecone_api_key, pinecone_index_name)
+        
+        # Initialize connection manager
+        connection_manager = ConnectionManager(config_manager)
+        
+        # Validate connections if requested
+        if validate:
+            show_status_panel("Validation", "Validating Google Drive and Pinecone connections...")
+            
+            # Test Google Drive connection
+            try:
+                from ..services.auth_service import AuthService
+                auth_service = AuthService(credentials_path)
+                user_info = auth_service.get_user_info()
+                show_success_panel("Google Drive", f"✓ Connected as: {user_info.get('emailAddress', 'Unknown')}")
+            except Exception as e:
+                show_error_panel("Google Drive", f"✗ Connection failed: {e}")
+                return
+            
+            # Test Pinecone connection
+            try:
+                connection_manager.validate_pinecone_connection(pinecone_api_key, pinecone_index_name)
+                show_success_panel("Pinecone", f"✓ Successfully connected to index '{pinecone_index_name}'")
+            except (AuthenticationError, IndexNotFoundError, IncompatibleIndexError) as e:
+                show_error_panel("Pinecone", f"✗ Connection failed: {e}")
+                return
+            
+            # Show connection status
+            status = connection_manager.get_connection_status()
+            show_connection_status(status)
+            
+            # Additional Pinecone validation
+            try:
+                from ..services.pinecone_service import PineconeService
+                pinecone_service = PineconeService(pinecone_api_key, pinecone_index_name)
+                
+                # Get index stats
+                stats = pinecone_service.get_index_stats()
+                total_vectors = stats.get('total_vector_count', 0)
+                
+                # Get index metadata
+                metadata = pinecone_service.get_index_metadata()
+                
+                validation_info = {
+                    "Total Vectors": total_vectors,
+                    "Embedding Model": metadata.get('embedding_model', 'Unknown') if metadata else 'Unknown',
+                    "Last Updated": metadata.get('last_refresh_time', 'Unknown') if metadata else 'Unknown',
+                    "Indexed Files": metadata.get('total_files_indexed', 'Unknown') if metadata else 'Unknown'
+                }
+                
+                show_success_panel("Validation Complete", "All connections validated successfully")
+                
+                # Display validation details
+                from .ui.progress import show_info_table
+                show_info_table("Index Information", validation_info)
+                
+            except Exception as e:
+                show_error_panel("Validation Warning", f"Index validation failed: {e}")
+        
         show_success_panel(
-            "Owner Mode Setup",
+            "Owner Mode Setup Complete",
             f"Successfully configured owner mode with:\n"
-            f"• Google Drive credentials: {credentials}\n"
-            f"• Pinecone index: {index_name}"
+            f"• Google Drive credentials: {credentials_path}\n"
+            f"• Pinecone index: {pinecone_index_name}\n\n"
+            f"You can now use the index and refresh commands."
         )
         
     except Exception as e:
         show_error_panel("Setup Error", f"Failed to set up owner mode: {e}")
 
 
-@main.command()
-@click.option('--api-key', '-k', required=True,
-              help='Pinecone API key')
-@click.option('--index-name', '-i', required=True,
-              help='Pinecone index name')
-def setup_connected(api_key, index_name):
-    """Set up connected mode with Pinecone credentials."""
-    try:
-        config_manager = ConfigManager()
-        config_manager.set_connection_config(api_key, index_name)
-        
-        from ..ui.progress import show_success_panel
-        show_success_panel(
-            "Connected Mode Setup",
-            f"Successfully configured connected mode with index: {index_name}"
-        )
-        
-    except Exception as e:
-        show_error_panel("Setup Error", f"Failed to set up connected mode: {e}")
+
 
 
 def main_wrapper():
