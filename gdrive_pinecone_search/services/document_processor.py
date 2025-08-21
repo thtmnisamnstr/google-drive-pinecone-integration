@@ -11,7 +11,7 @@ from ..utils.exceptions import DocumentProcessingError
 class DocumentProcessor:
     """Processes documents for chunking and embedding."""
     
-    def __init__(self, chunk_size: int = 800, chunk_overlap: int = 150):
+    def __init__(self, chunk_size: int = 450, chunk_overlap: int = 75):
         """
         Initialize document processor.
         

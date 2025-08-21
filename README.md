@@ -197,8 +197,8 @@ export GDRIVE_CREDENTIALS_JSON="path/to/credentials.json"
 
 # Optional Settings
 export EMBEDDING_MODEL="multilingual-e5-large"
-export CHUNK_SIZE="800"
-export CHUNK_OVERLAP="150"
+export CHUNK_SIZE="450"
+export CHUNK_OVERLAP="75"
 ```
 
 Notes:
@@ -228,8 +228,8 @@ The CLI stores configuration in `~/.config/gdrive-pinecone-search/config.json`:
   },
   "settings": {
     "embedding_model": "multilingual-e5-large",
-    "chunk_size": 800,
-    "chunk_overlap": 150
+    "chunk_size": 450,
+    "chunk_overlap": 75
   }
 }
 ```

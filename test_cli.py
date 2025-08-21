@@ -87,7 +87,7 @@ def test_document_processor():
     try:
         from gdrive_pinecone_search.services.document_processor import DocumentProcessor
         
-        processor = DocumentProcessor(chunk_size=800, chunk_overlap=150)
+        processor = DocumentProcessor(chunk_size=450, chunk_overlap=75)
         
         # Test text chunking
         test_text = "This is a test document. It contains multiple sentences. We want to see if chunking works properly."

@@ -29,8 +29,8 @@ class OwnerConfig(BaseModel):
 class Settings(BaseModel):
     """Application settings."""
     embedding_model: str = "multilingual-e5-large"
-    chunk_size: int = 800
-    chunk_overlap: int = 150
+    chunk_size: int = 450
+    chunk_overlap: int = 75
 
 
 class AppConfig(BaseModel):
