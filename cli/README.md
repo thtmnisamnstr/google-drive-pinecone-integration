@@ -84,7 +84,7 @@ gdrive-pinecone-search owner index --limit 100
 gdrive-pinecone-search owner index --dry-run
 ```
 
-### 3.5. Refresh Your Index (Optional)
+### 3.5. Refresh Your Index (Optional, Owner Mode only)
 
 ```bash
 # Incremental refresh using last refresh time
