@@ -38,11 +38,73 @@ class GDriveService:
         self.auth_service = auth_service
         self.service = auth_service.get_service()
     
-    @rate_limited(100, 100)  # 100 requests per 100 seconds
+    def _is_file_accessible(self, file_id: str, mime_type: str) -> bool:
+        """
+        Check if a file is accessible for export.
+        
+        Args:
+            file_id: Google Drive file ID
+            mime_type: MIME type of the file
+            
+        Returns:
+            True if file is accessible, False otherwise
+        """
+        try:
+            if mime_type not in self.SUPPORTED_MIME_TYPES:
+                return False
+            
+            # Use a faster validation approach - just check file permissions
+            # This is much faster than trying to export
+            file_info = self.service.files().get(
+                fileId=file_id,
+                fields="id,name,mimeType,capabilities"
+            ).execute()
+            
+            capabilities = file_info.get('capabilities', {})
+            
+            # Check if we can export the file
+            if not capabilities.get('canDownload', False):
+                return False
+            
+            return True
+            
+        except Exception as e:
+            # Check for specific permission errors
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['forbidden', '403', 'permission', 'notfound']):
+                return False
+            # For other errors (like network issues), we'll assume it's accessible
+            # and let the actual processing handle it
+            return True
+    
+    def get_file_content_with_validation(self, file_id: str, mime_type: str) -> Optional[str]:
+        """
+        Get file content with built-in accessibility validation.
+        Returns None if file is not accessible.
+        
+        Args:
+            file_id: Google Drive file ID
+            mime_type: MIME type of the file
+            
+        Returns:
+            File content or None if not accessible
+        """
+        try:
+            return self.get_file_content(file_id, mime_type)
+        except Exception as e:
+            # Check for specific permission errors
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['cannotexportfile', 'forbidden', '403', 'permission']):
+                return None
+            # Re-raise other errors
+            raise
+    
+    @rate_limited(1000, 100)  # 1000 requests per 100 seconds (increased rate limit)
     def list_files(self, 
                    file_types: Optional[List[str]] = None,
                    modified_since: Optional[datetime] = None,
-                   page_size: int = 100) -> Generator[Dict[str, Any], None, None]:
+                   page_size: int = 1000,  # Increased page size
+                   validate_access: bool = False) -> Generator[Dict[str, Any], None, None]:
         """
         List Google Drive files with optional filtering.
         
@@ -50,6 +112,7 @@ class GDriveService:
             file_types: List of file types to include (docs, sheets, slides)
             modified_since: Only include files modified since this time
             page_size: Number of files per page
+            validate_access: Whether to validate file accessibility during listing
             
         Yields:
             File metadata dictionaries
@@ -58,15 +121,14 @@ class GDriveService:
             # Build query
             query_parts = []
             
-            # Filter by file types
-            if file_types:
-                mime_types = [
-                    mime_type for mime_type, file_type in self.SUPPORTED_MIME_TYPES.items()
-                    if file_type in file_types
-                ]
-                if mime_types:
-                    mime_query = " or ".join([f"mimeType='{mime_type}'" for mime_type in mime_types])
-                    query_parts.append(f"({mime_query})")
+            # Always filter by supported file types to reduce results
+            mime_types = [
+                mime_type for mime_type, file_type in self.SUPPORTED_MIME_TYPES.items()
+                if not file_types or file_type in file_types
+            ]
+            if mime_types:
+                mime_query = " or ".join([f"mimeType='{mime_type}'" for mime_type in mime_types])
+                query_parts.append(f"({mime_query})")
             
             # Filter by modification time
             if modified_since:
@@ -93,6 +155,10 @@ class GDriveService:
                         # Add file type information
                         file['file_type'] = self.SUPPORTED_MIME_TYPES.get(file['mimeType'])
                         if file['file_type']:
+                            # Validate accessibility if requested
+                            if validate_access and not self._is_file_accessible(file['id'], file['mimeType']):
+                                # Skip inaccessible files
+                                continue
                             yield file
                     
                     page_token = results.get('nextPageToken', None)

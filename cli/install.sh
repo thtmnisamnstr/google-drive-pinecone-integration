@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Google Drive to Pinecone CLI Installation Script
+# This script should be run from the cli/ directory of the monorepo
 
 set -e
 
@@ -47,13 +48,13 @@ if [ $? -eq 0 ]; then
     echo "   export PINECONE_API_KEY='your-pinecone-api-key'"
     echo ""
     echo "2. For owner mode (full access), set up Google Drive credentials:"
-    echo "   gdrive-search setup-owner --credentials path/to/credentials.json"
+echo "   gdrive-pinecone-search owner setup --credentials path/to/credentials.json"
     echo ""
     echo "3. For connected mode (read-only), connect to existing index:"
-    echo "   gdrive-search connect my-index --api-key YOUR_PINECONE_API_KEY"
+    echo "   gdrive-pinecone-search connect --dense-index-name my-dense --sparse-index-name my-sparse --api-key YOUR_PINECONE_API_KEY"
     echo ""
     echo "4. Get help:"
-    echo "   gdrive-search help"
+    echo "   gdrive-pinecone-search --help"
     echo ""
     echo "For more information, see the README.md file."
 else

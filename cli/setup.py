@@ -8,14 +8,12 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="gdrive-pinecone-search",
-    version="1.0.0",
     author="Gavin Johnson",
-    description="CLI for semantic search across Google Drive documents using Pinecone",
+    description="CLI for hybrid search across Google Drive documents using Pinecone",
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=find_packages(),
     classifiers=[
-        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",

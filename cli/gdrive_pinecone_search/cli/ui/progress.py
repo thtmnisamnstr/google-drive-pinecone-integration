@@ -80,26 +80,33 @@ def show_connection_status(status: dict):
     
     # Pinecone status
     pinecone_status = status.get('pinecone', {})
-    pinecone_details = f"Index: {pinecone_status.get('index_name', 'N/A')}"
+    indexes = pinecone_status.get('indexes', {})
+    if indexes:
+        pinecone_details = f"Dense: {indexes.get('dense', 'N/A')}, Sparse: {indexes.get('sparse', 'N/A')}"
+    else:
+        pinecone_details = pinecone_status.get('error', 'N/A')
     table.add_row(
         "Pinecone",
-        "✓" if pinecone_status.get('configured') else "✗",
+        "✓" if pinecone_status.get('connected') else "✗",
         "✓" if pinecone_status.get('connected') else "✗",
         pinecone_details
     )
     
     # Google Drive status
     gdrive_status = status.get('google_drive', {})
-    gdrive_details = f"Path: {gdrive_status.get('credentials_path', 'N/A')}"
+    user_info = gdrive_status.get('user_info', {})
+    if user_info:
+        gdrive_details = f"User: {user_info.get('emailAddress', 'N/A')}"
+    else:
+        gdrive_details = gdrive_status.get('error', 'N/A')
     table.add_row(
         "Google Drive",
-        "✓" if gdrive_status.get('configured') else "✗",
+        "✓" if gdrive_status.get('connected') else "✗",
         "✓" if gdrive_status.get('connected') else "✗",
         gdrive_details
     )
     
     console.print(table)
-    console.print(f"Mode: {status.get('mode', 'unknown').title()}")
 
 
 def show_index_stats(stats: dict):
@@ -109,15 +116,15 @@ def show_index_stats(stats: dict):
     table.add_column("Value", style="white")
     
     # Extract relevant stats
-    total_vectors = stats.get('total_vector_count', 0)
-    namespaces = stats.get('namespaces', {})
+    dense_vectors = stats.get('dense_vectors', 0)
+    sparse_vectors = stats.get('sparse_vectors', 0)
+    dense_namespaces = stats.get('dense_namespaces', {})
+    sparse_namespaces = stats.get('sparse_namespaces', {})
     
-    table.add_row("Total Vectors", str(total_vectors))
-    table.add_row("Namespaces", str(len(namespaces)))
-    
-    # Show namespace details
-    for namespace, data in namespaces.items():
-        table.add_row(f"  {namespace}", f"{data.get('vector_count', 0)} vectors")
+    table.add_row("Dense Vectors", str(dense_vectors))
+    table.add_row("Dense Namespaces", str(len(dense_namespaces)))
+    table.add_row("Sparse Vectors", str(sparse_vectors))
+    table.add_row("Sparse Namespaces", str(len(sparse_namespaces)))
     
     console.print(table)
 
@@ -183,12 +190,13 @@ def show_configuration_summary(config: dict):
     # Connection info
     connection = config.get('connection', {})
     table.add_row("Mode", config.get('mode', 'unknown').title())
-    table.add_row("Pinecone Index", connection.get('index_name', 'N/A'))
+    table.add_row("Dense Index", connection.get('dense_index_name', 'N/A'))
+    table.add_row("Sparse Index", connection.get('sparse_index_name', 'N/A'))
 
     
     # Settings
     settings = config.get('settings', {})
-    table.add_row("Embedding Model", settings.get('embedding_model', 'N/A'))
+    table.add_row("Reranking Model", settings.get('reranking_model', 'N/A'))
     table.add_row("Chunk Size", str(settings.get('chunk_size', 'N/A')))
     table.add_row("Chunk Overlap", str(settings.get('chunk_overlap', 'N/A')))
     

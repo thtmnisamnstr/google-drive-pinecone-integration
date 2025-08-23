@@ -26,10 +26,10 @@ def test_imports():
         return False
     
     try:
-        from gdrive_pinecone_search.services.pinecone_service import PineconeService
-        print("✓ Pinecone service imported successfully")
+        from gdrive_pinecone_search.services.search_service import SearchService
+        print("✓ Search service imported successfully")
     except ImportError as e:
-        print(f"✗ Failed to import Pinecone service: {e}")
+        print(f"✗ Failed to import Search service: {e}")
         return False
     
     try:

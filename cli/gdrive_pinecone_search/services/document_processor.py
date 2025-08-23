@@ -156,10 +156,7 @@ class DocumentProcessor:
             'chunk_index': chunk_index,
             'content': chunk_text,
             'modified_time': file_metadata['modifiedTime'],
-            'web_view_link': file_metadata['webViewLink'],
-            'indexed_at': datetime.now().isoformat(),
-            'chunk_token_count': token_count,
-            'total_chunks': None  # Will be updated after all chunks are created
+            'web_view_link': file_metadata['webViewLink']
         }
     
     def process_file(self, file_content: str, file_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -173,14 +170,7 @@ class DocumentProcessor:
         Returns:
             List of chunk dictionaries
         """
-        chunks = self.chunk_text(file_content, file_metadata)
-        
-        # Update total_chunks count for all chunks
-        total_chunks = len(chunks)
-        for chunk in chunks:
-            chunk['total_chunks'] = total_chunks
-        
-        return chunks
+        return self.chunk_text(file_content, file_metadata)
     
     def get_token_count(self, text: str) -> int:
         """
