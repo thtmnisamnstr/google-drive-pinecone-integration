@@ -281,15 +281,15 @@ To use Pinecone for vector storage, follow these steps:
    - Sign up for a free Starter plan account
 
 2. **Get your API Key**
-   - After signing up, go to your project dashboard
-   - Click on "API Keys" in the left sidebar
-   - Copy your API key (starts with something like `sk-...`)
+   - After signing up, you'll be prompted to create a new project
+   - After you create a new project, it will give you an API key
+   - Copy your API key (starts with something like `pcsk-...`)
 
 3. **Create Dense and Sparse Indexes**
    - In your Pinecone project, click "Create Index"
    - Create two indexes:
-     - **Dense Index**: Choose `multilingual-e5-large` model, 1024 dimensions
-     - **Sparse Index**: Choose `pinecone-sparse-english-v0` model, 1024 dimensions
+     - **Dense Index**: Choose `multilingual-e5-large` model
+     - **Sparse Index**: Choose `pinecone-sparse-english-v0` model
    - Select your preferred cloud provider (e.g., AWS) and region (e.g., us-east-1)
    - Click "Create Index"
 
