@@ -2,12 +2,14 @@
 
 ## Description
 
-A sophisticated CLI tool that integrates Google Drive with Pinecone for **hybrid search** across organizational documents. The application leverages Google Drive API to extract content from Google Docs, Sheets, and Slides, processes them into intelligent chunks, and stores them in Pinecone's vector database using **integrated embedding models** (automatic vector generation). The CLI supports dual operation modes: **owner mode** (full access for indexing and searching) and **connected mode** (read-only search access to existing indexes).
+A sophisticated CLI tool that integrates Google Drive with Pinecone for **hybrid search** and **AI assistant** capabilities across organizational documents. The application leverages Google Drive API to extract content from Google Docs, Sheets, Slides, and all plaintext files, processes them intelligently, and stores them using either Pinecone's vector database (Search Mode) or Pinecone Assistant (Assistant Mode). The CLI supports dual operation modes: **owner mode** (full access for indexing and searching) and **connected mode** (read-only access to existing resources).
 
-The tool implements Pinecone's recommended hybrid search approach, combining dense semantic embeddings with sparse keyword embeddings, enhanced by intelligent reranking for superior search relevance. The system provides smart incremental updates, interactive search results, and direct file access from search results.
+The tool implements both Pinecone's recommended hybrid search approach (combining dense semantic embeddings with sparse keyword embeddings, enhanced by intelligent reranking) and Pinecone Assistant integration for conversational AI capabilities with automatic multimodal processing including PDF support.
 
 **Key Features:**
-- **Hybrid Search**: Combines dense (semantic) and sparse (keyword) vectors with reranking for optimal results
+- **Dual Processing Modes**: Search Mode (hybrid vector search) and Assistant Mode (conversational AI with multimodal support)
+- **Comprehensive File Support**: Google Workspace files, plaintext files (.txt, .md, code files), and PDFs (Assistant Mode)
+- **Selective File Processing**: User-controlled selection of specific folders and files for processing
 - **Integrated Embedding**: Automatic vector generation using Pinecone's hosted models (no external API calls)
 - **Dual Operation Modes**: Full access (owner) or read-only (connected) depending on requirements
 - **Smart Incremental Updates**: Intelligent refresh using timestamp tracking for optimal performance
@@ -23,31 +25,32 @@ The tool implements Pinecone's recommended hybrid search approach, combining den
 ┌─────────────────────────────────────────────────────────────────┐
 │                    CLI Application Layer                        │
 ├─────────────────────────────────────────────────────────────────┤
-│ Commands Layer                                                  │
+│ Commands Layer (with --assistant flag support)                 │
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
 │ │ owner setup │ │ owner index │ │ owner refresh│ │   search    ││
+│ │ [--assistant]│ │ [--assistant]│ │ [--assistant]│ │[--assistant]││
 │ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
 │ │   connect   │ │   status    │ │     help    │ │     UI      ││
+│ │ [--assistant]│ │ [--assistant]│ │             │ │             ││
 │ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
 ├─────────────────────────────────────────────────────────────────┤
 │ Service Layer                                                   │
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
-│ │SearchService│ │GDriveService│ │DocProcessor │ │ AuthService ││
-│ │(Hybrid)     │ │             │ │             │ │             ││
+│ │SearchService│ │AssistantSvc │ │GDriveService│ │DocProcessor ││
+│ │(Hybrid)     │ │(Assistant)  │ │(Enhanced)   │ │(Enhanced)   ││
 │ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
-├─────────────────────────────────────────────────────────────────┤
-│ Utilities Layer                                                 │
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
-│ │ConfigManager│ │RateLimiter  │ │ConnectionMgr│ │ Exceptions  ││
+│ │ AuthService │ │ConfigManager│ │RateLimiter  │ │ConnectionMgr││
+│ │             │ │(Dual Mode)  │ │             │ │             ││
 │ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
 ├─────────────────────────────────────────────────────────────────┤
 │ External APIs                                                   │
-│ ┌─────────────┐ ┌─────────────┐                                │
-│ │  Pinecone   │ │Google Drive │                                │
-│ │Dense+Sparse │ │     API     │                                │
-│ │+ Reranking  │ │             │                                │
-│ └─────────────┘ └─────────────┘                                │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│ │  Pinecone   │ │  Pinecone   │ │Google Drive │                │
+│ │Dense+Sparse │ │ Assistant   │ │     API     │                │
+│ │+ Reranking  │ │(Multimodal) │ │ (Enhanced)  │                │
+│ └─────────────┘ └─────────────┘ └─────────────┘                │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -57,6 +60,8 @@ The tool implements Pinecone's recommended hybrid search approach, combining den
                        │ - Auth Tokens   │
                        │ - Connection    │
                        │   State         │
+                       │ - File Selection│
+                       │   Preferences   │
                        └─────────────────┘
 ```
 
@@ -112,14 +117,16 @@ google-drive-pinecone-integration/
 ### Operation Modes
 
 **Owner Mode**: Complete CRUD operations
-- Index Google Drive → Pinecone (dense + sparse indexes)
-- Refresh/update existing indexes with smart incremental updates
-- Search indexed content using hybrid search with reranking
+- **Search Mode**: Index Google Drive → Pinecone (dense + sparse indexes) with hybrid search
+- **Assistant Mode**: Upload Google Drive files → Pinecone Assistant with conversational AI
+- Refresh/update existing resources with smart incremental updates
+- Search indexed content using hybrid search or chat with Assistant
 - Requires: Google Drive API access + Pinecone API key
 
 **Connected Mode**: Read-only operations
-- Search existing Pinecone indexes using hybrid search
-- View comprehensive index statistics
+- **Search Mode**: Search existing Pinecone indexes using hybrid search
+- **Assistant Mode**: Chat with existing Pinecone Assistant
+- View comprehensive resource statistics
 - Requires: Pinecone API key only
 
 ## Technical Requirements
@@ -137,20 +144,33 @@ google-drive-pinecone-integration/
 - Pinecone API key only
 - No Google Drive access required
 
-**Configuration Schema**:
+**Enhanced Configuration Schema**:
 ```json
 {
   "mode": "owner|connected",
+  "processing_mode": "search|assistant|dual",
   "connection": {
     "pinecone_api_key": "...",
+    // Search Mode configuration
     "dense_index_name": "company-gdrive-dense-index",
     "sparse_index_name": "company-gdrive-sparse-index",
+    // Assistant Mode configuration
+    "assistant_name": "my-company-assistant",
     "created_at": "2024-01-15T12:00:00Z"
   },
   "owner_config": {
     "google_drive_credentials_path": "...",
+    // Search Mode tracking
     "last_refresh_time": "2024-01-15T12:00:00Z",
-    "total_files_indexed": 1250
+    "total_files_indexed": 1250,
+    // Assistant Mode tracking
+    "last_upload_time": "2024-01-15T12:00:00Z",
+    "total_files_uploaded": 1250,
+    // File selection preferences
+    "selected_folders": [
+      {"id": "folder_id_1", "name": "Project Documents", "path": "/Work/Projects"}
+    ],
+    "selection_mode": "all|shared_only|interactive"
   },
   "settings": {
     "chunk_size": 450,
@@ -165,8 +185,13 @@ google-drive-pinecone-integration/
 # Required for Owner Mode
 GDRIVE_CREDENTIALS_JSON="path/to/credentials.json"
 PINECONE_API_KEY="your_pinecone_api_key"
+
+# Search Mode Configuration
 PINECONE_DENSE_INDEX_NAME="company-gdrive-dense-index"
 PINECONE_SPARSE_INDEX_NAME="company-gdrive-sparse-index"
+
+# Assistant Mode Configuration
+PINECONE_ASSISTANT_NAME="my-company-assistant"
 
 # Optional Settings (overrides config file)
 CHUNK_SIZE="450"
@@ -181,14 +206,26 @@ RERANKING_MODEL="pinecone-rerank-v0"
 - Validate API credentials on command execution
 - Automatic `.env` file loading from CLI directory
 
-### 2. Google Drive Integration (Owner Mode Only)
+### 2. Enhanced Google Drive Integration (Owner Mode Only)
 
-**Requirement**: Comprehensive Google Drive file access with intelligent change tracking
+**Requirement**: Comprehensive Google Drive file access with intelligent change tracking and enhanced file type support
 
-**Supported File Types**:
+**Google Workspace Files**:
 - Google Docs (`application/vnd.google-apps.document`) → exported as `text/plain`
 - Google Sheets (`application/vnd.google-apps.spreadsheet`) → exported as `text/csv`
 - Google Slides (`application/vnd.google-apps.presentation`) → exported as `text/plain`
+
+**Plaintext Files** (new):
+- Text files: `.txt`, `.md`, `.rst`, `.log`
+- Configuration files: `.json`, `.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`
+- Code files: `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.c`, `.h`, `.go`, `.rs`, `.rb`, `.php`, `.sh`, `.bash`, `.zsh`, `.ps1`, `.bat`, `.cmd`
+- Web files: `.html`, `.htm`, `.css`, `.xml`, `.svg`
+- Documentation: `.tex` (LaTeX source)
+- Data files: `.csv`, `.tsv`, `.sql`
+
+**PDF Files**:
+- Supported in Assistant Mode only (multimodal processing)
+- Not supported in Search Mode (requires specialized parsing)
 
 **API Integration**:
 - Google Drive API v3 with `files.list()` and `files.export()`
@@ -312,84 +349,280 @@ RERANKING_MODEL="pinecone-rerank-v0"
 - **Fallback**: Returns original results if reranking fails
 - **Rate Limiting**: 100 reranking requests per minute
 
-### 6. CLI Interface
+### 6. Selective File and Folder Inclusion
+
+**Requirement**: User-controlled selection of specific Google Drive folders and files for processing
+
+**Selection Interface**:
+- **Primary Method**: Google Drive's native sharing/selection interface when possible
+- **Fallback Method**: Interactive CLI-based folder/file browser
+- **Scope**: Only required for full index/re-index operations in Owner mode
+- **Hierarchy**: Folder selection automatically includes all files and subfolders
+
+**Implementation Strategy**:
+
+**Option 1: Google Drive Folder Sharing (Preferred)**:
+```bash
+# User shares specific folders with the service account
+# CLI detects shared folders and processes only those
+gdrive-pinecone-search owner index --shared-only
+```
+
+**Option 2: Interactive Selection (Fallback)**:
+```bash
+# CLI presents interactive folder/file browser
+gdrive-pinecone-search owner index --interactive-select
+```
+
+**Configuration Storage**:
+```json
+{
+  "owner_config": {
+    "selected_folders": [
+      {"id": "folder_id_1", "name": "Project Documents", "path": "/Work/Projects"},
+      {"id": "folder_id_2", "name": "Team Resources", "path": "/Shared/Team"}
+    ],
+    "selected_files": [
+      {"id": "file_id_1", "name": "Important Document.docx"}
+    ],
+    "selection_mode": "shared_only|interactive|all", // default: "all" 
+    "last_selection_update": "2024-01-15T12:00:00Z"
+  }
+}
+```
+
+**CLI Options**:
+- `--all`: Process all accessible files (default behavior, maintains backward compatibility)
+- `--shared-only`: Process only files/folders shared with service account
+- `--interactive-select`: Launch interactive selection interface
+- `--update-selection`: Update previously saved selection
+
+**Selection Persistence**:
+- Selections are saved and reused for subsequent refresh operations
+- Users can update selections without re-indexing
+- Clear indication when selections have changed since last index
+
+**Hierarchical Processing**:
+- Folder selection includes all nested files and subfolders
+- Automatic recursion through selected folder structures
+- Respect existing file type filters within selected scope
+
+### 7. Dual Mode Architecture: Search Mode vs Assistant Mode
+
+**Requirement**: Support both traditional hybrid search and Pinecone Assistant workflows
+
+**Architecture Overview**:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CLI Application Layer                        │
+├─────────────────────────────────────────────────────────────────┤
+│ Search Mode Commands          │ Assistant Mode Commands         │
+│ ┌─────────────┐ ┌─────────────┐│ ┌─────────────┐ ┌─────────────┐│
+│ │owner setup  │ │owner index  ││ │owner setup  │ │owner upload ││
+│ │             │ │             ││ │ --assistant │ │ --assistant ││
+│ └─────────────┘ └─────────────┘│ └─────────────┘ └─────────────┘│
+│ ┌─────────────┐ ┌─────────────┐│ ┌─────────────┐ ┌─────────────┐│
+│ │owner refresh│ │   search    ││ │owner refresh│ │   search    ││
+│ │             │ │             ││ │ --assistant │ │ --assistant ││
+│ └─────────────┘ └─────────────┘│ └─────────────┘ └─────────────┘│
+├─────────────────────────────────────────────────────────────────┤
+│ Service Layer                                                   │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
+│ │SearchService│ │AssistantSvc │ │GDriveService│ │ AuthService ││
+│ │(Hybrid)     │ │(Assistant)  │ │(Enhanced)   │ │             ││
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### **Search Mode (Enhanced)**
+
+**Existing Functionality** (unchanged):
+- Hybrid search with dense + sparse vectors + reranking
+- Google Workspace files (Docs, Sheets, Slides)
+- Manual chunking and embedding control
+- Direct Pinecone index management
+
+**New Enhancements**:
+- **Plaintext File Support**: All plaintext file types as specified in Section 2
+- **Selective Indexing**: Folder/file selection as specified in Section 6
+- **No PDF Support**: PDFs excluded (requires multimodal capabilities)
+
+### **Assistant Mode (New)**
+
+**Core Functionality**:
+- Leverages [Pinecone Assistant API](https://docs.pinecone.io/guides/assistant/overview)
+- Automatic chunking and embedding via Assistant
+- Multimodal support including PDFs
+- Built-in LLM integration for chat-based queries
+
+**Supported File Types**:
+- **All Search Mode files**: Google Workspace + plaintext files
+- **PDFs**: Full multimodal support via [Assistant upload](https://docs.pinecone.io/guides/assistant/multimodal)
+- **Future Multimodal**: Images, audio (when supported by Assistant API)
+
+**Assistant Service Implementation**:
+```python
+class AssistantService:
+    """Service for Pinecone Assistant operations."""
+    
+    def __init__(self, api_key: str, assistant_name: str):
+        self.pc = Pinecone(api_key=api_key)
+        self.assistant = self.pc.assistant.Assistant(assistant_name=assistant_name)
+    
+    def upload_files(self, files: List[Dict], metadata: Dict = None):
+        """Upload files to Assistant with automatic processing."""
+        # Uses Assistant's upload_file() method
+        # Handles both text and multimodal content
+    
+    def chat(self, message: str, conversation_id: str = None):
+        """Chat with Assistant using uploaded context."""
+        # Uses Assistant's chat() method
+        # Returns grounded responses with citations
+```
+
+**Feature Parity**:
+- **File Filtering**: Same `--file-types`, `--limit` options
+- **Selective Inclusion**: Same folder/file selection capabilities  
+- **Dry Run**: Preview uploads without processing
+- **Status Reporting**: File upload status and Assistant statistics
+- **Error Handling**: Comprehensive error handling and recovery
+
+**Mode Coexistence**:
+- Both modes can be configured simultaneously
+- Users can switch between modes without data loss
+- Separate command namespaces prevent conflicts
+- Independent configuration sections
+
+### 8. Enhanced CLI Interface
 
 **Requirement**: Production-ready command-line interface with rich user experience
 
-#### Core Commands
+#### Enhanced Command Structure with Assistant Mode Support
+
+**All existing commands now support an `--assistant` flag to operate in Assistant mode instead of Search mode.**
 
 **1. Owner Mode Setup**
 ```bash
+# Search Mode (existing, enhanced with plaintext support)
 gdrive-pinecone-search owner setup \
   --credentials path/to/credentials.json \
   --api-key your_pinecone_api_key \
   --dense-index-name company-gdrive-dense \
   --sparse-index-name company-gdrive-sparse \
   --validate
+
+# Assistant Mode (new)
+gdrive-pinecone-search owner setup --assistant \
+  --credentials path/to/credentials.json \
+  --api-key your_pinecone_api_key \
+  --assistant-name my-company-assistant \
+  --validate
 ```
 
-**2. Connect to Existing Indexes**
+**2. Connect to Existing Resources**
 ```bash
+# Search Mode (existing)
 gdrive-pinecone-search connect \
   --dense-index-name existing-dense-index \
   --sparse-index-name existing-sparse-index \
   --api-key your_pinecone_api_key \
   --validate
+
+# Assistant Mode (new)
+gdrive-pinecone-search connect --assistant \
+  --assistant-name existing-assistant \
+  --api-key your_pinecone_api_key \
+  --validate
 ```
 
-**3. Initial Indexing (Enhanced)**
+**3. Initial Indexing/Upload**
 ```bash
+# Search Mode (existing, enhanced with plaintext support)
 gdrive-pinecone-search owner index \
   --limit 100 \
-  --file-types docs,sheets,slides \
+  --file-types docs,sheets,slides,txt,py,md \
   --dry-run \
-  --credentials path/to/credentials.json
+  --interactive-select
+
+# Assistant Mode (new)
+gdrive-pinecone-search owner index --assistant \
+  --limit 100 \
+  --file-types docs,sheets,slides,pdf,txt,py,md \
+  --dry-run \
+  --interactive-select
 ```
 
-**4. Smart Incremental Refresh (Enhanced)**
+**4. Incremental Updates**
 ```bash
-# Automatic incremental using last refresh timestamp
-gdrive-pinecone-search owner refresh
-
-# Manual date override
-gdrive-pinecone-search owner refresh --since 2024-01-15
-
-# Full refresh with options
+# Search Mode (existing)
 gdrive-pinecone-search owner refresh \
-  --force-full \
-  --limit 50 \
+  --since 2024-01-15 \
   --file-types docs,sheets \
+  --dry-run
+
+# Assistant Mode (new)
+gdrive-pinecone-search owner refresh --assistant \
+  --since 2024-01-15 \
+  --file-types docs,sheets,pdf \
   --dry-run
 ```
 
-**5. Hybrid Search (Optimized)**
+**5. Search/Chat**
 ```bash
+# Search Mode (existing)
 gdrive-pinecone-search search "quarterly planning" \
   --limit 10 \
   --file-types docs,sheets \
   --interactive
+
+# Assistant Mode (new)
+gdrive-pinecone-search search --assistant "What are our Q4 objectives?" \
+  --conversation-id conv_123 \
+  --include-citations
 ```
 
 **6. Status & Diagnostics**
 ```bash
+# Search Mode (existing)
 gdrive-pinecone-search status \
   --verbose \
   --test-connections
+
+# Assistant Mode (new)
+gdrive-pinecone-search status --assistant \
+  --verbose \
+  --show-files
 ```
 
 #### Enhanced Options
 
-**Refresh Command Options** (matching `owner index` command):
-- **`--limit`**: Limit number of files to process
-- **`--file-types`**: Filter by specific file types (docs, sheets, slides)
-- **`--dry-run`**: Preview what would be processed without making changes
-- **`--since`**: Override last refresh time with specific date
-- **`--force-full`**: Ignore last refresh time and process all files
+**Enhanced Command Options**:
 
-**Search Command Options**:
+**Index/Refresh Commands**:
+- **`--limit`**: Limit number of files to process
+- **`--file-types`**: Filter by file types (docs, sheets, slides, txt, py, md, pdf*)
+- **`--dry-run`**: Preview what would be processed without making changes
+- **`--since`**: Override last refresh time with specific date (refresh only)
+- **`--force-full`**: Ignore last refresh time and process all files (refresh only)
+- **`--interactive-select`**: Launch interactive folder/file selection interface
+- **`--shared-only`**: Process only files/folders shared with service account
+- **`--assistant`**: Use Assistant mode instead of Search mode
+
+**Search Commands**:
 - **`--limit`**: Number of results to return (default: 10, max: 100)
-- **`--file-types`**: Filter by file types (docs, sheets, slides)
-- **`--interactive`**: Enable interactive result selection with detailed views
+- **`--file-types`**: Filter by file types (docs, sheets, slides, txt, py, md, pdf*)
+- **`--interactive`**: Enable interactive result selection (Search mode only)
+- **`--conversation-id`**: Continue existing conversation (Assistant mode only)
+- **`--include-citations`**: Include source citations in response (Assistant mode only)
+- **`--assistant`**: Use Assistant mode for conversational queries
+
+**Setup/Connect Commands**:
+- **`--assistant`**: Configure Assistant mode instead of Search mode
+- **`--assistant-name`**: Pinecone Assistant name (Assistant mode only)
+- **`--dense-index-name`**: Dense index name (Search mode only)
+- **`--sparse-index-name`**: Sparse index name (Search mode only)
+
+*PDF files only supported in Assistant mode
 
 #### UI Enhancements
 
@@ -409,7 +642,7 @@ gdrive-pinecone-search status \
 - Error panels with actionable messages and resolution suggestions
 - Success panels with next steps and operation summaries
 
-### 7. Error Handling & Resilience
+### 9. Error Handling & Resilience
 
 **Requirement**: Production-grade error handling for team environments
 
@@ -433,7 +666,7 @@ gdrive-pinecone-search status \
 - Resume capability for interrupted long-running operations
 - Circuit breakers for failing API endpoints
 
-### 8. Performance & Scalability
+### 10. Performance & Scalability
 
 **Requirement**: Efficient processing for large organizational Google Drive accounts
 
@@ -456,7 +689,7 @@ gdrive-pinecone-search status \
 - Detailed logging for debugging and monitoring
 - Performance metrics and operation summaries
 
-### 9. Current State & Implementation Status
+### 11. Current State & Implementation Status
 
 **Project Status**: Fully functional hybrid search implementation with recent monorepo restructuring
 
@@ -480,7 +713,7 @@ gdrive-pinecone-search status \
 
 **Files Status**: All major refactoring complete, no files requiring immediate attention
 
-### 10. Dependencies & Environment
+### 12. Dependencies & Environment
 
 **Python Version**: 3.8+ (tested with Python 3.13.7)
 
@@ -492,11 +725,14 @@ google-auth-oauthlib>=1.1.0     # OAuth2 flow for Google Drive
 google-auth-httplib2>=0.1.1     # HTTP transport for Google APIs
 google-api-python-client>=2.100.0 # Google Drive API client
 pinecone>=7.0.0                 # Pinecone vector database with integrated embedding
+pinecone-plugin-assistant>=1.0.0 # Pinecone Assistant plugin for multimodal capabilities
 tiktoken>=0.5.1                 # Token counting for chunk size management
 rich>=13.6.0                    # Rich terminal UI with progress bars and panels
 python-dotenv>=1.0.0            # Environment variable loading from .env files
 pydantic>=2.5.0                 # Data validation and settings management
 tenacity>=8.2.3                 # Retry logic with exponential backoff
+chardet>=5.2.0                  # Character encoding detection for plaintext files
+python-magic>=0.4.27            # MIME type detection fallback for file type detection
 ```
 
 **Installation Process**:
@@ -511,7 +747,7 @@ pip install -e .
 - Supports Python 3.8+ with classifiers for modern Python versions
 - MIT License with proper package metadata
 
-### 11. Operational Considerations
+### 13. Operational Considerations
 
 **Configuration Management**:
 - Primary config stored in `~/.config/gdrive-pinecone-search/config.json`
@@ -538,30 +774,42 @@ pip install -e .
 - Consistent vector ID format for efficient operations
 - Proper cleanup of deleted files from both indexes
 
-### 12. Future Roadmap & Enhancement Opportunities
+### 14. Future Roadmap & Enhancement Opportunities
 
 **Immediate Development Opportunities**:
+- **Syntax-Aware Chunking**: Intelligent chunking that respects code structure and syntax boundaries for programming files
+- **Advanced File Selection UI**: Web-based interface for folder/file selection with drag-and-drop support
 - **Multi-Architecture Builds**: PyInstaller/Nuitka builds for multiple platforms
 - **GitHub Actions CI/CD**: Automated testing and release pipeline
-- **Enhanced File Support**: PDFs, Word documents, additional Google Workspace types
-- **Performance Metrics**: Search analytics and performance monitoring
+- **Performance Metrics**: Search analytics and performance monitoring for both modes
+
+**Assistant Mode Enhancements**:
+- **Custom Instructions**: Assistant behavior customization for domain-specific responses
+- **Evaluation Integration**: Automated response quality assessment using Assistant evaluation features
+- **Context Snippet Retrieval**: Access to underlying context snippets for transparency using [Assistant context retrieval](https://docs.pinecone.io/guides/assistant/retrieve-context-snippets)
+- **Advanced Metadata Filtering**: Leverage Assistant's metadata filtering for precise queries
+- **Conversation Management**: Persistent conversation history and context management
+- **Multimodal Search Enhancement**: Extend search capabilities to handle images and audio when Assistant API supports retrieval
 
 **Medium-term Enhancements**:
-- **Web UI Implementation**: Complete the web-ui/ directory with modern interface
-- **Advanced Search Features**: Boolean operators, date ranges, advanced filters
-- **Custom Embedding Models**: Support for user-provided embedding models
-- **Multi-language Support**: Enhanced support for non-English content
+- **Web UI Implementation**: Complete the web-ui/ directory with modern interface supporting both Search and Assistant modes
+- **Advanced Search Features**: Boolean operators, date ranges, advanced filters for Search mode
+- **Custom Embedding Models**: Support for user-provided embedding models in Search mode
+- **Multi-language Support**: Enhanced support for non-English content in both modes
+- **File Synchronization**: Real-time sync with Google Drive changes using webhooks
 
 **Long-term Strategic Vision**:
-- **Multi-tenant Architecture**: Support for large organizations with multiple teams
-- **Enterprise Integration**: SharePoint, Confluence, and other document sources
-- **Advanced Analytics**: Search behavior insights and content recommendations
+- **Multi-tenant Architecture**: Support for large organizations with multiple teams and isolated assistants
+- **Enterprise Integration**: SharePoint, Confluence, and other document sources for both processing modes
+- **Advanced Analytics**: Search behavior insights and content recommendations across both modes
 - **Scalability Improvements**: Distributed processing for very large document collections
+- **Hybrid Workflows**: Seamless switching between Search and Assistant modes within single workflows
 
 **Technical Debt & Optimization**:
-- **Batch Processing**: Enhanced batch operations for better performance
+- **Batch Processing**: Enhanced batch operations for better performance in both modes
 - **Memory Optimization**: Further reduce memory footprint for large operations
-- **API Efficiency**: Optimize API calls and reduce redundant operations
+- **API Efficiency**: Optimize API calls and reduce redundant operations across Google Drive and Pinecone APIs
+- **Error Recovery**: Enhanced error recovery and resume capabilities for interrupted operations
 
 ---
 
