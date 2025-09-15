@@ -4,7 +4,7 @@ import click
 from typing import Optional
 from dotenv import load_dotenv
 
-from ...utils.config_manager import ConfigManager
+from ...utils.service_factory import get_service_factory
 from ...utils.connection_manager import ConnectionManager
 from ...utils.exceptions import (
     AuthenticationError, 
@@ -43,8 +43,9 @@ def setup_owner(credentials: Optional[str], api_key: Optional[str],
         # Ensure .env variables are loaded
         load_dotenv()
         
-        # Initialize configuration
-        config_manager = ConfigManager()
+        # Get service factory and initialize configuration
+        factory = get_service_factory()
+        config_manager = factory.create_config_manager()
         
         # Get credentials from parameters or environment
         import os
@@ -106,8 +107,7 @@ def setup_owner(credentials: Optional[str], api_key: Optional[str],
             show_status_panel("Indexes Not Found", "One or more Pinecone indexes don't exist. Creating them...")
             
             try:
-                from ...services.search_service import SearchService
-                search_service = SearchService(
+                search_service = factory.create_search_service(
                     final_api_key,
                     final_dense_index_name,
                     final_sparse_index_name
@@ -147,8 +147,7 @@ def setup_owner(credentials: Optional[str], api_key: Optional[str],
             
             try:
                 # Test hybrid service
-                from ...services.search_service import SearchService
-                search_service = SearchService(
+                search_service = factory.create_search_service(
                     final_api_key,
                     final_dense_index_name,
                     final_sparse_index_name

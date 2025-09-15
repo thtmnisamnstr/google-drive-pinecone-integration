@@ -4,13 +4,9 @@ import click
 from typing import List, Optional
 from datetime import datetime, timezone
 
-from ...services.search_service import SearchService
-from ...services.gdrive_service import GDriveService
-from ...services.document_processor import DocumentProcessor
-from ...services.auth_service import AuthService
-from ...utils.config_manager import ConfigManager
-from ...utils.connection_manager import ConnectionManager
+from ...utils.service_factory import get_service_factory
 from ...utils.exceptions import ConfigurationError, AuthenticationError
+from ...utils.file_types import validate_file_types, get_all_valid_file_types
 from ..ui.progress import (
     ProgressManager, show_status_panel, show_success_panel, show_error_panel
 )
@@ -21,7 +17,7 @@ from ..ui.results import display_file_processing_summary
 @click.option('--limit', '-l', type=int, 
               help='Limit the number of files to process')
 @click.option('--file-types', '-t', 
-              help='Comma-separated list of file types (docs,sheets,slides)')
+              help='Comma-separated list of file types (docs,sheets,slides,py,json,md,etc) or categories (code,config,txt,web,data)')
 @click.option('--dry-run', is_flag=True, 
               help='Show what would be indexed without making changes')
 @click.option('--credentials', '-c', 
@@ -43,8 +39,9 @@ def index(limit: Optional[int], file_types: Optional[str], dry_run: bool, creden
     gdrive-pinecone-search owner index --dry-run
     """
     try:
-        # Initialize configuration
-        config_manager = ConfigManager()
+        # Get service factory and initialize configuration
+        factory = get_service_factory()
+        config_manager = factory.create_config_manager()
         
         # Check if we're in owner mode
         if not config_manager.is_owner_mode():
@@ -70,32 +67,27 @@ def index(limit: Optional[int], file_types: Optional[str], dry_run: bool, creden
             )
             return
         
-        # Parse file types
+        # Parse and validate file types
         file_types_list = None
         if file_types:
-            file_types_list = [ft.strip() for ft in file_types.split(',')]
-            # Validate file types
-            valid_types = {'docs', 'sheets', 'slides'}
-            invalid_types = set(file_types_list) - valid_types
-            if invalid_types:
-                show_error_panel(
-                    "Invalid File Types",
-                    f"Invalid file types: {', '.join(invalid_types)}. Valid types are: {', '.join(valid_types)}"
-                )
+            try:
+                file_types_list = validate_file_types(file_types)
+            except ValueError as e:
+                show_error_panel("Invalid File Types", str(e))
                 return
         
         # Initialize services
         show_status_panel("Initializing", "Setting up services...")
         
         # Authentication service
-        auth_service = AuthService(credentials_path)
+        auth_service = factory.create_auth_service(credentials_path)
         
         # Google Drive service
-        gdrive_service = GDriveService(auth_service)
+        gdrive_service = factory.create_gdrive_service(auth_service)
         
         # Document processor
         settings = config_manager.config.settings
-        document_processor = DocumentProcessor(
+        document_processor = factory.create_document_processor(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap
         )
@@ -109,7 +101,7 @@ def index(limit: Optional[int], file_types: Optional[str], dry_run: bool, creden
             sparse_index_name = config_manager.get_sparse_index_name()
             reranking_model = settings.reranking_model
             
-            search_service = SearchService(
+            search_service = factory.create_search_service(
                 pinecone_api_key,
                 dense_index_name,
                 sparse_index_name,
@@ -201,7 +193,7 @@ def index(limit: Optional[int], file_types: Optional[str], dry_run: bool, creden
                     
                     # Process file content
                     # Extract text content with validation
-                    text_content = gdrive_service.get_file_content_with_validation(file['id'], file['mimeType'])
+                    text_content = gdrive_service.get_file_content_with_validation(file['id'], file['mimeType'], file['name'])
                     
                     if text_content is None:
                         # File is not accessible, skip it

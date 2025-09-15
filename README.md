@@ -17,15 +17,19 @@ A powerful command-line interface that provides:
 
 - **Hybrid Search**: Combines dense semantic embeddings and sparse keyword embeddings for superior search results
 - **Smart Indexing**: Incremental updates that only process changed files
-- **Multiple File Types**: Support for Google Docs, Sheets, and Slides
+- **Comprehensive File Support**: Support for 39 file types including Google Workspace files and all plaintext files (code, config, documentation)
+- **Intelligent Processing**: File type-specific preprocessing with automatic encoding detection
 - **Dual Modes**: Owner mode (full access) and Connected mode (read-only search)
 - **Reranking**: Uses Pinecone's hosted reranking model for improved relevance
 
 **Key Features:**
 - Automatic document chunking with overlap
+- Enhanced file type detection and preprocessing
 - Integrated embedding models (no API calls needed)
 - Rate limiting and error handling
 - Comprehensive logging and progress tracking
+- File type categories for easy selection (code, config, txt, web, data)
+- Fast test suite (91 tests running in 0.49 seconds with behavioral validation)
 
 [View CLI Documentation →](./cli/)
 

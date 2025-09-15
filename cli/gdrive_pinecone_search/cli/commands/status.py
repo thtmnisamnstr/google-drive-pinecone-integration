@@ -3,7 +3,7 @@
 import click
 from typing import Optional
 
-from ...utils.config_manager import ConfigManager
+from ...utils.service_factory import get_service_factory
 from ...utils.connection_manager import ConnectionManager
 from ...utils.exceptions import ConfigurationError
 from ..ui.progress import (
@@ -30,8 +30,9 @@ def status(verbose: bool, test_connections: bool):
     gdrive-pinecone-search status --test-connections
     """
     try:
-        # Initialize configuration
-        config_manager = ConfigManager()
+        # Get service factory and initialize configuration
+        factory = get_service_factory()
+        config_manager = factory.create_config_manager()
         
         # Get configuration
         config = config_manager.get_config()
@@ -87,7 +88,7 @@ def status(verbose: bool, test_connections: bool):
                 sparse_index_name = config_manager.get_sparse_index_name()
                 reranking_model = config.settings.reranking_model
                 
-                search_service = SearchService(
+                search_service = factory.create_search_service(
                     pinecone_api_key,
                     dense_index_name,
                     sparse_index_name,

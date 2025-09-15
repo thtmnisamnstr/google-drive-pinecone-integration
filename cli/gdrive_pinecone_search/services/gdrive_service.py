@@ -6,22 +6,39 @@ from typing import List, Dict, Any, Optional, Generator
 from datetime import datetime
 from urllib.parse import urlparse
 
+import chardet
+try:
+    import magic
+    HAS_MAGIC = True
+except ImportError:
+    HAS_MAGIC = False
+
 from ..utils.rate_limiter import rate_limited, GOOGLE_DRIVE_RATE_LIMITER
 from ..utils.exceptions import DocumentProcessingError, APIRateLimitError
 from .auth_service import AuthService
+from ..utils.file_types import (
+    GOOGLE_WORKSPACE_TYPES, PLAINTEXT_EXTENSIONS, 
+    get_file_type_from_extension, is_supported_file_type
+)
 
 
 class GDriveService:
     """Service for Google Drive operations."""
     
-    # Supported Google Workspace file types
+    # Merge Google Workspace and plaintext types
     SUPPORTED_MIME_TYPES = {
-        'application/vnd.google-apps.document': 'docs',
-        'application/vnd.google-apps.spreadsheet': 'sheets',
-        'application/vnd.google-apps.presentation': 'slides'
+        **GOOGLE_WORKSPACE_TYPES,
+        # Add common plaintext MIME types that Google Drive might report
+        'text/plain': 'txt',
+        'text/markdown': 'md',
+        'application/json': 'json',
+        'text/html': 'html',
+        'text/css': 'css',
+        'text/javascript': 'js',
+        'text/x-python': 'py'
     }
     
-    # Export formats for each file type
+    # Export formats - Google Workspace files only
     EXPORT_FORMATS = {
         'application/vnd.google-apps.document': 'text/plain',
         'application/vnd.google-apps.spreadsheet': 'text/csv',
@@ -38,19 +55,21 @@ class GDriveService:
         self.auth_service = auth_service
         self.service = auth_service.get_service()
     
-    def _is_file_accessible(self, file_id: str, mime_type: str) -> bool:
+    def _is_file_accessible(self, file_id: str, mime_type: str, filename: str = "") -> bool:
         """
-        Check if a file is accessible for export.
+        Check if a file is accessible for export/download.
         
         Args:
             file_id: Google Drive file ID
             mime_type: MIME type of the file
+            filename: Name of the file (for plaintext file detection)
             
         Returns:
             True if file is accessible, False otherwise
         """
         try:
-            if mime_type not in self.SUPPORTED_MIME_TYPES:
+            # Check if file type is supported
+            if mime_type not in GOOGLE_WORKSPACE_TYPES and not self._is_plaintext_file(filename, mime_type):
                 return False
             
             # Use a faster validation approach - just check file permissions
@@ -62,7 +81,7 @@ class GDriveService:
             
             capabilities = file_info.get('capabilities', {})
             
-            # Check if we can export the file
+            # Check if we can export/download the file
             if not capabilities.get('canDownload', False):
                 return False
             
@@ -77,7 +96,81 @@ class GDriveService:
             # and let the actual processing handle it
             return True
     
-    def get_file_content_with_validation(self, file_id: str, mime_type: str) -> Optional[str]:
+    def _detect_file_type(self, filename: str, mime_type: str) -> Optional[str]:
+        """
+        Detect file type from filename and MIME type.
+        
+        Args:
+            filename: Name of the file
+            mime_type: MIME type reported by Google Drive
+            
+        Returns:
+            File type string or None if unsupported
+        """
+        # First check if it's a Google Workspace file
+        if mime_type in GOOGLE_WORKSPACE_TYPES:
+            return GOOGLE_WORKSPACE_TYPES[mime_type]
+        
+        # For plaintext files, prefer extension-based detection over generic MIME types
+        ext_type = get_file_type_from_extension(filename)
+        if ext_type:
+            return ext_type
+        
+        # Fallback to MIME type for plaintext files
+        if mime_type in self.SUPPORTED_MIME_TYPES:
+            return self.SUPPORTED_MIME_TYPES[mime_type]
+        
+        return None
+    
+    def _is_plaintext_file(self, filename: str, mime_type: str) -> bool:
+        """Check if file is a plaintext file (not Google Workspace)."""
+        return (mime_type not in GOOGLE_WORKSPACE_TYPES and 
+                is_supported_file_type(filename, mime_type))
+    
+    @rate_limited(100, 100)
+    def get_plaintext_file_content(self, file_id: str, filename: str) -> str:
+        """
+        Get content of a plaintext file.
+        
+        Args:
+            file_id: Google Drive file ID
+            filename: Name of the file
+            
+        Returns:
+            File content as string
+            
+        Raises:
+            DocumentProcessingError: If content extraction fails
+        """
+        try:
+            # Download file content
+            request = self.service.files().get_media(fileId=file_id)
+            file_content = io.BytesIO()
+            downloader = request.execute()
+            file_content.write(downloader)
+            file_content.seek(0)
+            
+            # Detect encoding
+            raw_content = file_content.read()
+            detected_encoding = chardet.detect(raw_content)
+            encoding = detected_encoding.get('encoding', 'utf-8')
+            
+            # Decode content
+            try:
+                content = raw_content.decode(encoding)
+            except UnicodeDecodeError:
+                # Fallback to utf-8 with error handling
+                content = raw_content.decode('utf-8', errors='replace')
+            
+            return content
+            
+        except Exception as e:
+            if "quota" in str(e).lower():
+                raise APIRateLimitError(f"Google Drive API quota exceeded: {e}")
+            else:
+                raise DocumentProcessingError(f"Failed to get plaintext file content: {e}")
+    
+    def get_file_content_with_validation(self, file_id: str, mime_type: str, filename: str = "") -> Optional[str]:
         """
         Get file content with built-in accessibility validation.
         Returns None if file is not accessible.
@@ -85,12 +178,13 @@ class GDriveService:
         Args:
             file_id: Google Drive file ID
             mime_type: MIME type of the file
+            filename: Name of the file (required for plaintext files)
             
         Returns:
             File content or None if not accessible
         """
         try:
-            return self.get_file_content(file_id, mime_type)
+            return self.get_file_content(file_id, mime_type, filename)
         except Exception as e:
             # Check for specific permission errors
             error_str = str(e).lower()
@@ -109,26 +203,44 @@ class GDriveService:
         List Google Drive files with optional filtering.
         
         Args:
-            file_types: List of file types to include (docs, sheets, slides)
+            file_types: List of file types to include (docs, sheets, slides, py, json, md, etc.)
             modified_since: Only include files modified since this time
             page_size: Number of files per page
             validate_access: Whether to validate file accessibility during listing
             
         Yields:
-            File metadata dictionaries
+            File metadata dictionaries with enhanced file_type detection
         """
         try:
             # Build query
             query_parts = []
             
-            # Always filter by supported file types to reduce results
-            mime_types = [
-                mime_type for mime_type, file_type in self.SUPPORTED_MIME_TYPES.items()
-                if not file_types or file_type in file_types
-            ]
-            if mime_types:
-                mime_query = " or ".join([f"mimeType='{mime_type}'" for mime_type in mime_types])
-                query_parts.append(f"({mime_query})")
+            # For plaintext files, we need to get all files and filter by extension
+            # since Google Drive may not report accurate MIME types for plaintext files
+            if file_types:
+                # If specific file types requested, include known MIME types
+                known_mime_types = [
+                    mime_type for mime_type, file_type in self.SUPPORTED_MIME_TYPES.items()
+                    if file_type in file_types
+                ]
+                
+                # For plaintext files, also include generic types that might contain them
+                has_plaintext_types = any(ft not in ['docs', 'sheets', 'slides'] for ft in file_types)
+                if has_plaintext_types:
+                    # Add common generic MIME types that plaintext files might have
+                    generic_types = [
+                        "text/plain", "application/octet-stream", "text/x-python", 
+                        "application/json", "text/markdown", "text/html", "text/css",
+                        "text/javascript", "application/x-sh"
+                    ]
+                    known_mime_types.extend(generic_types)
+                
+                if known_mime_types:
+                    # Remove duplicates
+                    known_mime_types = list(set(known_mime_types))
+                    mime_query = " or ".join([f"mimeType='{mime_type}'" for mime_type in known_mime_types])
+                    query_parts.append(f"({mime_query})")
+            # If no file types specified, don't filter by MIME type to get all files
             
             # Filter by modification time
             if modified_since:
@@ -152,11 +264,13 @@ class GDriveService:
                     
                     files = results.get('files', [])
                     for file in files:
-                        # Add file type information
-                        file['file_type'] = self.SUPPORTED_MIME_TYPES.get(file['mimeType'])
-                        if file['file_type']:
+                        # Enhanced file type detection
+                        file_type = self._detect_file_type(file['name'], file['mimeType'])
+                        file['file_type'] = file_type
+                        
+                        if file_type:
                             # Validate accessibility if requested
-                            if validate_access and not self._is_file_accessible(file['id'], file['mimeType']):
+                            if validate_access and not self._is_file_accessible(file['id'], file['mimeType'], file['name']):
                                 # Skip inaccessible files
                                 continue
                             yield file
@@ -175,43 +289,50 @@ class GDriveService:
             raise DocumentProcessingError(f"Error listing files: {e}")
     
     @rate_limited(100, 100)
-    def get_file_content(self, file_id: str, mime_type: str) -> str:
+    def get_file_content(self, file_id: str, mime_type: str, filename: str = "") -> str:
         """
         Get the text content of a Google Drive file.
         
         Args:
             file_id: Google Drive file ID
             mime_type: MIME type of the file
+            filename: Name of the file (required for plaintext files)
             
         Returns:
             Extracted text content
-            
-        Raises:
-            DocumentProcessingError: If content extraction fails
         """
         try:
-            if mime_type not in self.SUPPORTED_MIME_TYPES:
-                raise DocumentProcessingError(f"Unsupported file type: {mime_type}")
+            # Handle Google Workspace files (existing logic)
+            if mime_type in GOOGLE_WORKSPACE_TYPES:
+                if mime_type not in self.EXPORT_FORMATS:
+                    raise DocumentProcessingError(f"Unsupported Google Workspace file type: {mime_type}")
+                
+                export_format = self.EXPORT_FORMATS[mime_type]
+                file_type = GOOGLE_WORKSPACE_TYPES[mime_type]
+                
+                # Export file content
+                request = self.service.files().export_media(
+                    fileId=file_id,
+                    mimeType=export_format
+                )
+                
+                file_content = io.BytesIO()
+                downloader = request.execute()
+                file_content.write(downloader)
+                file_content.seek(0)
+                
+                # Process content based on file type
+                if file_type == 'sheets':
+                    return self._process_sheets_content(file_content)
+                else:
+                    return file_content.read().decode('utf-8')
             
-            export_format = self.EXPORT_FORMATS[mime_type]
-            file_type = self.SUPPORTED_MIME_TYPES[mime_type]
+            # Handle plaintext files (new logic)
+            elif self._is_plaintext_file(filename, mime_type):
+                return self.get_plaintext_file_content(file_id, filename)
             
-            # Export file content
-            request = self.service.files().export_media(
-                fileId=file_id,
-                mimeType=export_format
-            )
-            
-            file_content = io.BytesIO()
-            downloader = request.execute()
-            file_content.write(downloader)
-            file_content.seek(0)
-            
-            # Process content based on file type
-            if file_type == 'sheets':
-                return self._process_sheets_content(file_content)
             else:
-                return file_content.read().decode('utf-8')
+                raise DocumentProcessingError(f"Unsupported file type: {mime_type}")
                 
         except Exception as e:
             if "quota" in str(e).lower():
@@ -262,8 +383,8 @@ class GDriveService:
                 fields="id, name, mimeType, modifiedTime, webViewLink, size, createdTime, owners"
             ).execute()
             
-            # Add file type information
-            file['file_type'] = self.SUPPORTED_MIME_TYPES.get(file['mimeType'])
+            # Add enhanced file type information
+            file['file_type'] = self._detect_file_type(file['name'], file['mimeType'])
             
             return file
             

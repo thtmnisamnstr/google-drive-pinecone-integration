@@ -4,7 +4,7 @@ import click
 from typing import Optional
 from dotenv import load_dotenv
 
-from ...utils.config_manager import ConfigManager
+from ...utils.service_factory import get_service_factory
 from ...utils.connection_manager import ConnectionManager
 from ...utils.exceptions import (
     AuthenticationError, 
@@ -41,8 +41,9 @@ def connect(dense_index_name: Optional[str], sparse_index_name: Optional[str], v
         # This is safe to call multiple times and helps when this command is invoked directly.
         load_dotenv()
         
-        # Initialize configuration
-        config_manager = ConfigManager()
+        # Get service factory and initialize configuration
+        factory = get_service_factory()
+        config_manager = factory.create_config_manager()
         
         # Get API key from parameter or environment
         import os
@@ -103,8 +104,7 @@ def connect(dense_index_name: Optional[str], sparse_index_name: Optional[str], v
             
             try:
                 # Test hybrid service
-                from ...services.search_service import SearchService
-                search_service = SearchService(pinecone_api_key, final_dense_index_name, final_sparse_index_name)
+                search_service = factory.create_search_service(pinecone_api_key, final_dense_index_name, final_sparse_index_name)
                 
                 # Get index stats
                 stats = search_service.get_index_stats()

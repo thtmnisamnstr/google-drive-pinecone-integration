@@ -2,10 +2,12 @@
 
 import re
 import tiktoken
+import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from ..utils.exceptions import DocumentProcessingError
+from ..utils.file_types import FILE_TYPE_CATEGORIES
 
 
 class DocumentProcessor:
@@ -22,10 +24,64 @@ class DocumentProcessor:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.tokenizer = tiktoken.get_encoding("cl100k_base")  # Used by OpenAI models
+        
+        # File type specific processors
+        self.file_type_processors = {
+            'json': self._process_json_content,
+            'xml': self._process_xml_content,
+            'html': self._process_html_content,
+            'code': self._process_code_content
+        }
+    
+    def _get_processing_category(self, file_type: str) -> str:
+        """Get processing category for file type."""
+        for category, types in FILE_TYPE_CATEGORIES.items():
+            if file_type in types:
+                return category
+        return 'txt'  # Default to plain text processing
+    
+    def _process_json_content(self, text: str) -> str:
+        """Process JSON files - format for better readability."""
+        try:
+            # Parse and reformat JSON for better chunking
+            data = json.loads(text)
+            return json.dumps(data, indent=2, ensure_ascii=False)
+        except json.JSONDecodeError:
+            # If not valid JSON, treat as plain text
+            return text
+    
+    def _process_xml_content(self, text: str) -> str:
+        """Process XML files - extract text content."""
+        # For now, treat as plain text
+        # Future enhancement: parse XML and extract meaningful text
+        return text
+    
+    def _process_html_content(self, text: str) -> str:
+        """Process HTML files - extract text content."""
+        # For now, treat as plain text
+        # Future enhancement: parse HTML and extract text content
+        return text
+    
+    def _process_code_content(self, text: str) -> str:
+        """Process code files - preserve structure."""
+        # For now, treat as plain text
+        # Future enhancement: syntax-aware processing
+        return text
+    
+    def _preprocess_content(self, text: str, file_type: str) -> str:
+        """Preprocess content based on file type."""
+        processing_category = self._get_processing_category(file_type)
+        
+        if processing_category in self.file_type_processors:
+            processor = self.file_type_processors[processing_category]
+            text = processor(text)
+        
+        return text
     
     def chunk_text(self, text: str, file_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Chunk text into smaller pieces for embedding.
+        Enhanced to handle different file types.
         
         Args:
             text: Raw text content
@@ -38,8 +94,14 @@ class DocumentProcessor:
             if not text.strip():
                 return []
             
+            # Get file type for preprocessing
+            file_type = file_metadata.get('file_type', 'txt')
+            
+            # Preprocess content based on file type
+            preprocessed_text = self._preprocess_content(text, file_type)
+            
             # Clean and normalize text
-            cleaned_text = self._clean_text(text)
+            cleaned_text = self._clean_text(preprocessed_text)
             
             # Split into sentences first
             sentences = self._split_into_sentences(cleaned_text)
