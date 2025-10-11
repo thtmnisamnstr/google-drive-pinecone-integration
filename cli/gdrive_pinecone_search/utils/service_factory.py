@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any
 from abc import ABC, abstractmethod
 
 from .config_manager import ConfigManager
-from .connection_manager import ConnectionManager
 from ..services.search_service import SearchService
 from ..services.gdrive_service import GDriveService
 from ..services.document_processor import DocumentProcessor
@@ -17,11 +16,6 @@ class ServiceFactoryInterface(ABC):
     @abstractmethod
     def create_config_manager(self) -> ConfigManager:
         """Create ConfigManager instance."""
-        pass
-    
-    @abstractmethod
-    def create_connection_manager(self) -> ConnectionManager:
-        """Create ConnectionManager instance."""
         pass
     
     @abstractmethod
@@ -56,10 +50,6 @@ class ServiceFactory(ServiceFactoryInterface):
     def create_config_manager(self) -> ConfigManager:
         """Create ConfigManager instance."""
         return ConfigManager()
-    
-    def create_connection_manager(self) -> ConnectionManager:
-        """Create ConnectionManager instance."""
-        return ConnectionManager()
     
     def create_search_service(self, api_key: str, dense_index: str, sparse_index: str, 
                              reranking_model: str = "pinecone-rerank-v0") -> SearchService:
@@ -98,10 +88,6 @@ class MockServiceFactory(ServiceFactoryInterface):
     def create_config_manager(self) -> ConfigManager:
         """Create mock ConfigManager instance."""
         return self.mock_services.get('config_manager', self._create_default_mock('ConfigManager'))
-    
-    def create_connection_manager(self) -> ConnectionManager:
-        """Create mock ConnectionManager instance."""
-        return self.mock_services.get('connection_manager', self._create_default_mock('ConnectionManager'))
     
     def create_search_service(self, api_key: str, dense_index: str, sparse_index: str, 
                              reranking_model: str = "pinecone-rerank-v0") -> SearchService:

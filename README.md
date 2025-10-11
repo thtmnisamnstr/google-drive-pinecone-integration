@@ -4,40 +4,26 @@ A comprehensive solution for indexing and searching Google Drive content using P
 
 ## Overview
 
-This monorepo contains multiple components for integrating Google Drive with Pinecone vector search:
-
-- **CLI Tool**: Command-line interface for indexing and searching Google Drive files
-- **Web UI**: Web-based interface (coming eventually)
+This monorepo contains the reference CLI implementation for integrating Google Drive with Pinecone hybrid search. A future web UI may live alongside the CLI, but today the repository focuses on the command-line experience.
 
 ## Projects
 
 ### [CLI Tool](./cli/)
 
-A powerful command-line interface that provides:
+The CLI lets you index and search Google Drive content using Pinecone’s hosted hybrid search (dense + sparse) and reranking services. Highlights include:
 
-- **Hybrid Search**: Combines dense semantic embeddings and sparse keyword embeddings for superior search results
-- **Smart Indexing**: Incremental updates that only process changed files
-- **Comprehensive File Support**: Support for 39 file types including Google Workspace files and all plaintext files (code, config, documentation)
-- **Intelligent Processing**: File type-specific preprocessing with automatic encoding detection
-- **Dual Modes**: Owner mode (full access) and Connected mode (read-only search)
-- **Reranking**: Uses Pinecone's hosted reranking model for improved relevance
+- Owner mode for indexing with Google Drive OAuth credentials
+- Connected mode for search-only access using an existing Pinecone project
+- Incremental refresh that tracks modified, new, and removed files
+- Support for Google Docs/Sheets/Slides plus 36 plaintext extensions (39 total types)
+- Integrated embeddings with Pinecone’s `create_index_for_model` workflow
+- Behavioral test suite of 76 mocked CLI scenarios with dependency-injected services and automated retries
 
-**Key Features:**
-- Automatic document chunking with overlap
-- Enhanced file type detection and preprocessing
-- Integrated embedding models (no API calls needed)
-- Rate limiting and error handling
-- Comprehensive logging and progress tracking
-- File type categories for easy selection (code, config, txt, web, data)
-- Fast test suite (91 tests running in 0.49 seconds with behavioral validation)
+See the [CLI documentation](./cli/) for installation, configuration, and command help.
 
-[View CLI Documentation →](./cli/)
+### Web UI (future)
 
-### [Web UI](./web-ui/)
-
-A web-based interface for the Google Drive Pinecone Integration (coming eventually).
-
-[View Web UI →](./web-ui/)
+A web experience is planned but not yet implemented. The `web-ui/` directory currently contains placeholders only.
 
 ## Getting Started
 

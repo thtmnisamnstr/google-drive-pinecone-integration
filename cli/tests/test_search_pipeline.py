@@ -16,15 +16,10 @@ class TestSearchPipeline:
         runner = CliRunner()
         result = runner.invoke(search, ['test query'])
         
-        if result.exit_code == 0:
-            # When successful, should show search results or "no results"
-            assert any(phrase in result.output for phrase in [
-                "Results", "No results", "Found", "matches", "search", "test-file-123"
-            ]), f"Expected search output not found: {result.output[:200]}..."
-        else:
-            # When failing, should show user-friendly error
-            assert 'Traceback' not in result.output, "Should not expose tracebacks to users"
-            assert len(result.output.strip()) > 0, "Should provide error message"
+        assert result.exit_code == 0
+        assert any(phrase in result.output for phrase in [
+            "Results", "No results", "Found", "matches", "test-file-123"
+        ]), f"Expected search output not found: {result.output[:200]}..."
     
     def test_search_file_type_filtering(self):
         """Test search with file type filtering."""
@@ -32,11 +27,12 @@ class TestSearchPipeline:
         
         # Test invalid file types - CLI uses return instead of sys.exit, so check output
         result = runner.invoke(search, ['test query', '--file-types', 'invalid_type'])
-        assert 'Invalid File Types' in result.output or 'Invalid file type' in result.output
+        assert result.exit_code == 0
+        assert 'Invalid file type' in result.output
         
         # Test valid file types
         result = runner.invoke(search, ['test query', '--file-types', 'py,json'])
-        # Should not fail on file type validation (may fail on other things)
+        assert result.exit_code == 0
         assert 'Invalid file type' not in result.output
     
     def test_search_with_enhanced_file_types(self):
@@ -65,10 +61,7 @@ class TestSearchPipeline:
         runner = CliRunner()
         result = runner.invoke(search, ['test query', '--file-types', 'code'])
         
-        # Should execute without crashing
-        assert result.exit_code in [0, 1]
-        assert 'Traceback' not in result.output
-        # Should not have file type validation errors
+        assert result.exit_code == 0
         assert 'Invalid file type' not in result.output
     
     def test_search_parameter_validation(self):
@@ -77,9 +70,8 @@ class TestSearchPipeline:
         
         # Test with limit parameter
         result = runner.invoke(search, ['test query', '--limit', '5'])
-        # Should not fail on parameter validation
-        assert 'Invalid' not in result.output or 'limit' not in result.output.lower()
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
+        assert 'Invalid' not in result.output.lower()
 
 class TestHybridSearchService:
     """Test the hybrid search service functionality."""
@@ -99,9 +91,7 @@ class TestHybridSearchService:
         # All mocking is handled by the service factory automatically
         runner = CliRunner()
         result = runner.invoke(search, ['test query'])
-        
-        # Should execute without crashing
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
         assert 'Traceback' not in result.output
 
 class TestSearchErrorHandling:
@@ -122,11 +112,6 @@ class TestSearchErrorHandling:
         runner = CliRunner()
         result = runner.invoke(search, [])
         
-        # Should fail when no query provided
         assert result.exit_code != 0, "Search should fail without query"
-        # Should not crash with traceback
         assert 'Traceback' not in result.output
-        # Should provide helpful error message
-        assert any(phrase in result.output for phrase in [
-            "Missing argument", "Usage:", "query", "Error:"
-        ]), f"Missing query error not clear: {result.output[:200]}..."
+        assert 'Missing argument' in result.output or 'Usage:' in result.output

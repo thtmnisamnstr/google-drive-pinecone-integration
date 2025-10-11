@@ -15,30 +15,18 @@ class TestIndexingPipeline:
         runner = CliRunner()
         result = runner.invoke(index, [])
         
-        if result.exit_code == 0:
-            # When successful, should show completion message
-            assert any(phrase in result.output for phrase in [
-                "Indexing Complete", "Successfully processed", "files", "Complete", "processed"
-            ]), f"Expected completion message not found: {result.output[:200]}..."
-        else:
-            # Should fail gracefully without traceback
-            assert 'Traceback' not in result.output, "Should not expose tracebacks to users"
-            assert len(result.output.strip()) > 0, "Should provide error message"
+        assert result.exit_code == 0
+        assert 'Initializing' in result.output or 'Setting up services' in result.output
     
     def test_index_requires_owner_mode(self):
         """Test that indexing executes in owner mode."""
         runner = CliRunner()
         result = runner.invoke(index, [])
         
-        # Should execute without crashing (service factory provides owner mode by default)
-        if result.exit_code == 0:
-            # Should show successful execution
-            assert any(phrase in result.output for phrase in [
-                "Connected", "files", "Complete", "processed", "owner"
-            ]), f"Expected owner mode execution output: {result.output[:200]}..."
-        else:
-            # Should fail gracefully
-            assert 'Traceback' not in result.output
+        assert result.exit_code == 0
+        assert any(phrase in result.output for phrase in [
+            "Connected", "Indexing Complete", "Successfully processed"
+        ]), f"Expected owner mode execution output: {result.output[:200]}..."
     
     def test_index_file_type_validation(self):
         """Test indexing with file type validation."""
@@ -46,11 +34,12 @@ class TestIndexingPipeline:
         
         # Test invalid file types - CLI uses return instead of sys.exit, so check output
         result = runner.invoke(index, ['--file-types', 'invalid_type'])
-        assert 'Invalid File Types' in result.output or 'Invalid file type' in result.output
+        assert result.exit_code == 0
+        assert 'Invalid file type' in result.output
         
         # Test valid file types
         result = runner.invoke(index, ['--file-types', 'py,json'])
-        # Should not fail on file type validation (may fail on other things)
+        assert result.exit_code == 0
         assert 'Invalid file type' not in result.output
     
     def test_indexing_with_enhanced_file_types(self):
@@ -60,10 +49,7 @@ class TestIndexingPipeline:
         runner = CliRunner()
         result = runner.invoke(index, ['--file-types', 'py,json,md'])
         
-        # Should execute without crashing
-        assert result.exit_code in [0, 1]
-        assert 'Traceback' not in result.output
-        # Should not have file type validation errors
+        assert result.exit_code == 0
         assert 'Invalid file type' not in result.output
     
     def test_indexing_dry_run(self):
@@ -72,15 +58,7 @@ class TestIndexingPipeline:
         # All mocking is handled by the service factory automatically
         runner = CliRunner()
         result = runner.invoke(index, ['--dry-run'])
-        
-        if result.exit_code == 0:
-            # Should show dry run information
-            assert any(phrase in result.output for phrase in [
-                "would", "dry", "preview", "files", "found"
-            ]), f"Expected dry run output not found: {result.output[:200]}..."
-        else:
-            # Should fail gracefully
-            assert 'Traceback' not in result.output
+        assert result.exit_code == 0
     
     def test_indexing_with_limit(self):
         """Test indexing with --limit parameter."""
@@ -88,9 +66,8 @@ class TestIndexingPipeline:
         
         # Test with limit parameter
         result = runner.invoke(index, ['--limit', '10'])
-        # Should not fail on parameter validation
-        assert 'Invalid' not in result.output or 'limit' not in result.output.lower()
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
+        assert 'Invalid' not in result.output.lower()
 
 class TestIndexingFileTypeIntegration:
     """Test indexing with enhanced file type support."""
@@ -120,6 +97,7 @@ class TestIndexingFileTypeIntegration:
         
         for file_type in plaintext_types:
             result = runner.invoke(index, ['--file-types', file_type])
+            assert result.exit_code == 0
             assert 'Invalid file type' not in result.output, f"File type {file_type} should be valid"
 
 class TestIndexingErrorHandling:
@@ -131,8 +109,7 @@ class TestIndexingErrorHandling:
         runner = CliRunner()
         result = runner.invoke(index, [])
         
-        # Should execute without crashing
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
         assert 'Traceback' not in result.output
     
     def test_indexing_authentication_error(self):
@@ -141,6 +118,5 @@ class TestIndexingErrorHandling:
         runner = CliRunner()
         result = runner.invoke(index, [])
         
-        # Should execute without crashing
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
         assert 'Traceback' not in result.output

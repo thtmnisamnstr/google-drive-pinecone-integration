@@ -205,6 +205,8 @@ def setup_mock_service_factory():
             'web_view_link': 'https://drive.google.com/file/d/test-file-123'
         }
     ]
+    mock_search_service.list_file_ids.return_value = []
+    mock_search_service.get_index_metadata.return_value = {}
     
     # Mock other services
     mock_auth_service = Mock()
@@ -215,21 +217,13 @@ def setup_mock_service_factory():
     mock_document_processor = Mock()
     mock_document_processor.chunk_text.return_value = []
     
-    mock_connection_manager = Mock()
-    mock_connection_manager.get_connection_info.return_value = {
-        'dense_index': 'test-dense-index',
-        'sparse_index': 'test-sparse-index',
-        'api_key': 'test-api-key'
-    }
-    
     # Create mock service factory with all services
     mock_services = {
         'config_manager': mock_config_manager,
         'search_service': mock_search_service,
         'auth_service': mock_auth_service,
         'gdrive_service': mock_gdrive_service,
-        'document_processor': mock_document_processor,
-        'connection_manager': mock_connection_manager
+        'document_processor': mock_document_processor
     }
     
     mock_factory = MockServiceFactory(mock_services)

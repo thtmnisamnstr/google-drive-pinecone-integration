@@ -16,15 +16,8 @@ class TestRefreshPipeline:
         runner = CliRunner()
         result = runner.invoke(refresh, [])
         
-        if result.exit_code == 0:
-            # Should show refresh completion or progress message
-            assert any(phrase in result.output for phrase in [
-                "Refresh Complete", "refresh complete", "Successfully processed", "Complete", "files", "Initializing", "Setting up"
-            ]), f"Expected refresh status message not found: {result.output[:200]}..."
-        else:
-            # Should fail gracefully
-            assert 'Traceback' not in result.output, "Should not expose tracebacks to users"
-            assert len(result.output.strip()) > 0, "Should provide error message"
+        assert result.exit_code == 0
+        assert 'Initializing' in result.output or 'Setting up services' in result.output
     
     def test_refresh_requires_owner_mode(self):
         """Test that refresh executes in owner mode."""
@@ -41,11 +34,12 @@ class TestRefreshPipeline:
         
         # Test invalid file types - CLI uses return instead of sys.exit, so check output
         result = runner.invoke(refresh, ['--file-types', 'invalid_type'])
-        assert 'Invalid File Types' in result.output or 'Invalid file type' in result.output
+        assert result.exit_code == 0
+        assert 'Invalid file type' in result.output
         
         # Test valid file types
         result = runner.invoke(refresh, ['--file-types', 'py,json'])
-        # Should not fail on file type validation (may fail on other things)
+        assert result.exit_code == 0
         assert 'Invalid file type' not in result.output
     
     def test_refresh_dry_run(self):
@@ -54,15 +48,7 @@ class TestRefreshPipeline:
         # All mocking is handled by the service factory automatically
         runner = CliRunner()
         result = runner.invoke(refresh, ['--dry-run'])
-        
-        if result.exit_code == 0:
-            # Should show dry run information or initialization
-            assert any(phrase in result.output for phrase in [
-                "would", "dry", "preview", "files", "found", "refresh", "Initializing", "Setting up"
-            ]), f"Expected dry run or status output not found: {result.output[:200]}..."
-        else:
-            # Should fail gracefully
-            assert 'Traceback' not in result.output
+        assert result.exit_code == 0
     
     def test_refresh_force_full(self):
         """Test --force-full refresh processes all files."""
@@ -70,15 +56,7 @@ class TestRefreshPipeline:
         # All mocking is handled by the service factory automatically
         runner = CliRunner()
         result = runner.invoke(refresh, ['--force-full'])
-        
-        if result.exit_code == 0:
-            # Should show full refresh completion
-            assert any(phrase in result.output for phrase in [
-                "Complete", "full", "files", "processed", "refresh"
-            ]), f"Expected full refresh completion message: {result.output[:200]}..."
-        else:
-            # Should fail gracefully
-            assert 'Traceback' not in result.output
+        assert result.exit_code == 0
 
 class TestRefreshFileTypeIntegration:
     """Test refresh with enhanced file type support."""
@@ -108,4 +86,5 @@ class TestRefreshFileTypeIntegration:
         
         for file_type in plaintext_types:
             result = runner.invoke(refresh, ['--file-types', file_type])
+            assert result.exit_code == 0
             assert 'Invalid file type' not in result.output, f"File type {file_type} should be valid"

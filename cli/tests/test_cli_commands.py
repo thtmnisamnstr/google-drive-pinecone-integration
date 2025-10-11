@@ -96,8 +96,7 @@ class TestCommandParameterValidation:
         result = runner.invoke(main, ['owner', 'index', '--file-types', 'py,json'])
         # Should not have file type validation errors
         assert 'Invalid file type' not in result.output
-        # Command should execute (may succeed or fail for other reasons, but not file type validation)
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
     
     def test_refresh_file_type_validation(self):
         """Test refresh command file type validation."""
@@ -111,8 +110,7 @@ class TestCommandParameterValidation:
         result = runner.invoke(main, ['owner', 'refresh', '--file-types', 'code,config'])
         # Should not have file type validation errors
         assert 'Invalid file type' not in result.output
-        # Command should execute (may succeed or fail for other reasons, but not file type validation)
-        assert result.exit_code in [0, 1]
+        assert result.exit_code == 0
     
     def test_search_file_type_validation(self):
         """Test search command file type validation."""
@@ -136,10 +134,8 @@ class TestCommandExecution:
         
         # Mock configuration handled by service factory
         result = runner.invoke(main, ['status'])
-        # Status command should execute without crashing (may succeed or fail gracefully)
-        assert result.exit_code in [0, 1]
-        # Should have some status-related output
-        assert len(result.output) > 0
+        assert result.exit_code == 0
+        assert 'Status' in result.output
     
     def test_owner_mode_requirement(self):
         """Test that owner commands require owner mode."""
@@ -147,11 +143,13 @@ class TestCommandExecution:
         
         # Test index command - should execute without crashing
         result = runner.invoke(main, ['owner', 'index'])
-        assert result.exit_code in [0, 1]  # May succeed or fail, but shouldn't crash
+        assert result.exit_code == 0
+        assert 'Initializing' in result.output or 'Setting up services' in result.output
         
         # Test refresh command - should execute without crashing  
         result = runner.invoke(main, ['owner', 'refresh'])
-        assert result.exit_code in [0, 1]  # May succeed or fail, but shouldn't crash
+        assert result.exit_code == 0
+        assert 'Initializing' in result.output or 'Setting up services' in result.output
 
 class TestBasicFunctionality:
     """Test basic CLI functionality."""
@@ -162,8 +160,8 @@ class TestBasicFunctionality:
         
         # Test search with query
         result = runner.invoke(main, ['search', 'test query'])
-        # Should execute without crashing (may succeed or fail gracefully)
-        assert result.exit_code in [0, 1, 2]
+        assert result.exit_code == 0
+        assert 'Performing hybrid search' in result.output or 'No results' in result.output
         
         # Should not have invalid file type errors for default execution
         assert 'Invalid file type' not in result.output
@@ -174,8 +172,8 @@ class TestBasicFunctionality:
         
         # Test connect with required parameters
         result = runner.invoke(main, ['connect', '--dense-index-name', 'test-dense', '--sparse-index-name', 'test-sparse'])
-        # Should execute without crashing (may succeed or fail gracefully)
-        assert result.exit_code in [0, 1, 2]
+        assert result.exit_code == 0
+        assert 'Validating connections' in result.output or 'Indexes' in result.output
     
     def test_file_type_categories(self):
         """Test that file type categories are recognized."""

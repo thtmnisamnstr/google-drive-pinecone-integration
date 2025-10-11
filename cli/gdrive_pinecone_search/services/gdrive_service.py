@@ -4,16 +4,10 @@ import io
 import csv
 from typing import List, Dict, Any, Optional, Generator
 from datetime import datetime
-from urllib.parse import urlparse
 
 import chardet
-try:
-    import magic
-    HAS_MAGIC = True
-except ImportError:
-    HAS_MAGIC = False
 
-from ..utils.rate_limiter import rate_limited, GOOGLE_DRIVE_RATE_LIMITER
+from ..utils.rate_limiter import rate_limited, with_retry
 from ..utils.exceptions import DocumentProcessingError, APIRateLimitError
 from .auth_service import AuthService
 from ..utils.file_types import (
@@ -127,6 +121,7 @@ class GDriveService:
         return (mime_type not in GOOGLE_WORKSPACE_TYPES and 
                 is_supported_file_type(filename, mime_type))
     
+    @with_retry()
     @rate_limited(100, 100)
     def get_plaintext_file_content(self, file_id: str, filename: str) -> str:
         """
@@ -170,6 +165,7 @@ class GDriveService:
             else:
                 raise DocumentProcessingError(f"Failed to get plaintext file content: {e}")
     
+    @with_retry()
     def get_file_content_with_validation(self, file_id: str, mime_type: str, filename: str = "") -> Optional[str]:
         """
         Get file content with built-in accessibility validation.
@@ -193,6 +189,7 @@ class GDriveService:
             # Re-raise other errors
             raise
     
+    @with_retry()
     @rate_limited(1000, 100)  # 1000 requests per 100 seconds (increased rate limit)
     def list_files(self, 
                    file_types: Optional[List[str]] = None,
@@ -288,6 +285,7 @@ class GDriveService:
         except Exception as e:
             raise DocumentProcessingError(f"Error listing files: {e}")
     
+    @with_retry()
     @rate_limited(100, 100)
     def get_file_content(self, file_id: str, mime_type: str, filename: str = "") -> str:
         """
@@ -367,6 +365,7 @@ class GDriveService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to process sheets content: {e}")
     
+    @with_retry()
     def get_file_metadata(self, file_id: str) -> Dict[str, Any]:
         """
         Get detailed metadata for a specific file.
@@ -391,6 +390,7 @@ class GDriveService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to get file metadata: {e}")
     
+    @with_retry()
     def get_user_info(self) -> Dict[str, Any]:
         """
         Get information about the authenticated user.
@@ -400,6 +400,7 @@ class GDriveService:
         """
         return self.auth_service.get_user_info()
     
+    @with_retry()
     def get_storage_quota(self) -> Dict[str, Any]:
         """
         Get Google Drive storage quota information.

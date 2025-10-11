@@ -11,13 +11,13 @@ The tool implements Pinecone's recommended hybrid search approach, combining den
 - **Comprehensive File Support**: Google Workspace files (Docs, Sheets, Slides) + 39 plaintext file types
 - **Dual Operation Modes**: Owner mode (full access) or Connected mode (read-only search)
 - **Smart Incremental Updates**: Timestamp-based refresh for optimal performance
-- **Interactive Results**: Rich CLI interface with direct browser file opening
+- **Interactive Results**: Rich CLI interface with optional interactive result inspection (scores, open-in-browser)
 - **Production-Ready**: Built-in rate limiting, error handling, and comprehensive testing
 
-**Future Enhancements:**
-- **Assistant Mode**: Planned integration with Pinecone Assistant for conversational AI capabilities
-- **PDF Support**: Will be available with Assistant Mode integration
-- **Web UI**: Planned web interface component
+**Future Enhancements (not yet implemented):**
+- **Assistant Mode**: Potential Pinecone Assistant integration for conversational workflows
+- **PDF Support**: Would rely on Assistant capabilities or separate parsing pipeline
+- **Web UI**: Placeholder `web-ui/` directory reserved for a future front-end
 
 ## Architecture
 
@@ -31,9 +31,9 @@ The tool implements Pinecone's recommended hybrid search approach, combining den
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
 │ │ owner setup │ │ owner index │ │ owner refresh│ │   search    ││
 │ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
-│ │   connect   │ │   status    │ │     help    │ │     UI      ││
-│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                 │
+│ │   connect   │ │   status    │ │   (help)    │                 │
+│ └─────────────┘ └─────────────┘ └─────────────┘                 │
 ├─────────────────────────────────────────────────────────────────┤
 │ Service Layer                                                   │
 │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
@@ -318,13 +318,13 @@ gdrive-pinecone-search status                   # System status
 - Google Drive API: 100 requests/100 seconds per user
 - Pinecone API: Respect service-specific limits
 - Reranking API: 100 requests/minute
-- Exponential backoff with jitter for all API calls
+- Exponential backoff with jitter for all API calls (implemented with Tenacity)
 
 **Error Recovery:**
 - Graceful handling of network failures and API errors
 - Partial result returns when possible
 - Clear, actionable error messages for users
-- Automatic retry logic with configurable backoff
+- Automatic retry logic with configurable exponential backoff (Tenacity)
 
 **Logging and Monitoring:**
 - Structured logging with `rich` console output
@@ -357,9 +357,9 @@ gdrive-pinecone-search status                   # System status
 **Requirement**: Comprehensive testing framework ensuring reliability
 
 **Test Coverage:**
-- **91 comprehensive tests** covering all CLI functionality
-- **Sub-second execution** (0.49 seconds) with proper mocking
-- **Behavioral validation** testing user-facing functionality
+- **76 behavioral tests** covering CLI workflows, pipelines, and utilities
+- **Fast execution** (sub-second on local runs) using dependency-injected mocks
+- **Behavioral validation** that asserts user-visible output instead of internal calls
 - **Implementation independence** for maintainability
 
 **Test Categories:**
@@ -395,14 +395,11 @@ python-dotenv>=1.0.0            # Environment variable loading
 pydantic>=2.5.0                 # Data validation
 tenacity>=8.2.3                 # Retry logic with backoff
 chardet>=5.2.0                  # Character encoding detection
-python-magic>=0.4.27            # MIME type detection
 pytest>=7.0.0                   # Testing framework
 ```
 
 **Platform-Specific Requirements:**
-- **macOS**: `brew install libmagic`
-- **Ubuntu/Debian**: `sudo apt-get install libmagic1`
-- **Windows**: No additional requirements (python-magic-bin included)
+- None beyond the Python dependencies listed above; the CLI relies on filename-based detection and `chardet` for encoding heuristics.
 
 **Installation Process:**
 ```bash
@@ -489,14 +486,25 @@ RERANKING_MODEL="pinecone-rerank-v0"
 
 ## Future Roadmap & Enhancement Opportunities
 
-**Immediate Development Opportunities**:
-- **Syntax-Aware Chunking**: Intelligent chunking that respects code structure and syntax boundaries for programming files
-- **Advanced File Selection UI**: Web-based interface for folder/file selection with drag-and-drop support
-- **Multi-Architecture Builds**: PyInstaller/Nuitka builds for multiple platforms
-- **GitHub Actions CI/CD**: Automated testing and release pipeline
-- **Performance Metrics**: Search analytics and performance monitoring for both modes
+- **Google Drive Selection Profiles (Near-Term)**:
+    - **Goal**: Allow owner-mode users to choose specific folders/files for indexing while defaulting to the entire Drive when no selection exists.
+    - **CLI Workflow**:
+        - Provide an `owner select` (or enhanced `owner setup`) command that retrieves Drive hierarchy data and lets users interactively mark folders/files to include or exclude. Offer non-interactive flags (`--include`, `--exclude`, `--clear`) for scripted workflows.
+        - Present a confirmation summary (e.g., counts of included/excluded folders/files) before persisting selection changes.
+    - **Selection Semantics**:
+        - Store Google Drive IDs in two lists: `include_ids` and `exclude_ids`. Default behavior (no include list) indexes everything except explicit exclusions; when the include list is populated, only those IDs and their descendants (minus exclusions) are indexed.
+        - Support re-including specific descendants of an excluded folder by listing them in `include_ids`.
+    - **Persistence & Metadata**:
+        - Extend the Pinecone `__index_metadata__` record with a versioned `selection_profile` payload (include/exclude lists, timestamps, optional notes). `ConfigManager` may cache the profile locally, but Pinecone remains the source of truth so multiple machines stay consistent.
+        - Validate stored IDs at the beginning of indexing/refresh; warn and self-heal if folders/files are missing or permissions changed.
+    - **Index/Refresh Integration**:
+        - Enhance Drive listing utilities to request parent IDs and evaluate each file against the selection profile before chunking or file-type filtering. Combine with existing `--file-types` filters using logical AND.
+        - Ensure exclusions cascade to all descendants unless explicitly re-included; surface skips when `--verbose` is used. During refresh, remove Pinecone vectors for items transitioning from selected to unselected (analogous to deletion cleanup).
+    - **UX & Testing**:
+        - Use `rich` tree views with lazy expansion for large Drives; allow search/filter by name. Log actions in verbose mode for auditability.
+        - Add unit tests for the selection evaluator (file ancestry vs. include/exclude lists) and CLI integration tests that mock Drive listings. Document current limitations (e.g., shared-drive behavior) and guidance for large hierarchies.
 
-**Assistant Mode Enhancements**:
+**Assistant Mode**:
 - **Custom Instructions**: Assistant behavior customization for domain-specific responses
 - **Evaluation Integration**: Automated response quality assessment using Assistant evaluation features
 - **Context Snippet Retrieval**: Access to underlying context snippets for transparency using [Assistant context retrieval](https://docs.pinecone.io/guides/assistant/retrieve-context-snippets)
@@ -505,18 +513,23 @@ RERANKING_MODEL="pinecone-rerank-v0"
 - **Multimodal Search Enhancement**: Extend search capabilities to handle images and audio when Assistant API supports retrieval
 
 **Medium-term Enhancements**:
-- **Web UI Implementation**: Complete the web-ui/ directory with modern interface supporting both Search and Assistant modes
+- **Multi-Architecture Builds**: PyInstaller/Nuitka builds for multiple platforms
+- **GitHub Actions CI/CD**: Automated testing and release pipeline
+- **Performance Metrics**: Search analytics and performance monitoring for both modes
+- **Syntax-Aware Chunking**: Intelligent chunking that respects code structure and syntax boundaries for programming files
+
+**Longer-term Enhancements**:
+- **Hybrid Workflows**: Seamless switching between Search and Assistant modes within single workflows
+- **Web UI Implementation**: Complete the web-ui/ directory with modern interface supporting both Search and Assistant modes that is containerized with Docker
 - **Advanced Search Features**: Boolean operators, date ranges, advanced filters for Search mode
 - **Custom Embedding Models**: Support for user-provided embedding models in Search mode
 - **Multi-language Support**: Enhanced support for non-English content in both modes
-- **File Synchronization**: Real-time sync with Google Drive changes using webhooks
 
 **Long-term Strategic Vision**:
 - **Multi-tenant Architecture**: Support for large organizations with multiple teams and isolated assistants
 - **Enterprise Integration**: SharePoint, Confluence, and other document sources for both processing modes
 - **Advanced Analytics**: Search behavior insights and content recommendations across both modes
 - **Scalability Improvements**: Distributed processing for very large document collections
-- **Hybrid Workflows**: Seamless switching between Search and Assistant modes within single workflows
 
 **Technical Debt & Optimization**:
 - **Batch Processing**: Enhanced batch operations for better performance in both modes
@@ -543,10 +556,9 @@ RERANKING_MODEL="pinecone-rerank-v0"
 - Comprehensive docstrings and code documentation
 
 **Deployment Considerations**:
-- Single binary distribution via PyInstaller for easy deployment
-- Docker containerization for consistent environments
-- Environment-specific configuration management
-- Automated dependency management and security updates
+- Packaging or containerization is not yet provided; users run the CLI from source/venv.
+- Configuration relies on environment variables and the local config file managed by `ConfigManager`.
+- Teams can layer their own automation (e.g., PyInstaller, Docker) if needed.
 
 ---
 

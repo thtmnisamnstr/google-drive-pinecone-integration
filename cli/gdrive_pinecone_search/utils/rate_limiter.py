@@ -4,9 +4,12 @@ import time
 import random
 from typing import Callable, Any
 from functools import wraps
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+try:
+    from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+except ModuleNotFoundError:  # pragma: no cover - tenacity required by requirements
+    retry = stop_after_attempt = wait_exponential = retry_if_exception_type = None  # type: ignore
 
-from .exceptions import APIRateLimitError
+from .exceptions import APIRateLimitError, DocumentProcessingError, ConnectionError
 
 
 class RateLimiter:
@@ -64,27 +67,27 @@ def rate_limited(max_calls: int, time_window: int):
     return decorator
 
 
-def retry_with_backoff(max_attempts: int = 3, base_delay: float = 1.0):
-    """
-    Decorator to retry function calls with exponential backoff.
-    
-    Args:
-        max_attempts: Maximum number of retry attempts
-        base_delay: Base delay in seconds for exponential backoff
-    """
+def with_retry(max_attempts: int = 5, base_wait: float = 1.0):
+    """Decorator to add exponential backoff retry semantics to API calls."""
+
+    if None in (retry, stop_after_attempt, wait_exponential, retry_if_exception_type):
+        raise RuntimeError("Tenacity is required for retry support but is not installed.")
+
+    retryable = (APIRateLimitError, ConnectionError, DocumentProcessingError)
+
     def decorator(func: Callable) -> Callable:
-        @retry(
+        wrapped = retry(  # type: ignore[misc]
+            reraise=True,
             stop=stop_after_attempt(max_attempts),
-            wait=wait_exponential(multiplier=base_delay, min=base_delay, max=60),
-            retry=retry_if_exception_type((APIRateLimitError, ConnectionError))
-        )
+            wait=wait_exponential(multiplier=base_wait, max=base_wait * 16),
+            retry=retry_if_exception_type(retryable),
+        )(func)
+
         @wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            return func(*args, **kwargs)
+        def wrapper(*args, **kwargs):
+            return wrapped(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
-
-# Pre-configured rate limiters for common APIs
-GOOGLE_DRIVE_RATE_LIMITER = RateLimiter(max_calls=100, time_window=100)  # 100 requests per 100 seconds
-PINECONE_RATE_LIMITER = RateLimiter(max_calls=1000, time_window=60)  # 1000 requests per minute 

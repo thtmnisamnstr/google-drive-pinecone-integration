@@ -2,10 +2,10 @@
 
 import time
 from pinecone import Pinecone
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Iterator, Set
 from datetime import datetime
 
-from ..utils.rate_limiter import rate_limited, PINECONE_RATE_LIMITER
+from ..utils.rate_limiter import rate_limited, with_retry
 from ..utils.exceptions import (
     AuthenticationError, 
     IndexNotFoundError, 
@@ -100,6 +100,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to create indexes: {e}")
     
+    @with_retry()
     @rate_limited(1000, 60)  # 1000 requests per minute
     def upsert_hybrid_vectors(self, vectors: List[Dict[str, Any]], batch_size: int = 96) -> int:
         """
@@ -148,6 +149,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to upsert hybrid vectors: {e}")
     
+    @with_retry()
     @rate_limited(1000, 60)
     def hybrid_query(self, 
                     query_text: str,
@@ -305,6 +307,7 @@ class SearchService:
         sorted_hits = sorted(deduped_hits.values(), key=lambda x: x['_score'], reverse=True)
         return sorted_hits
     
+    @with_retry()
     @rate_limited(100, 60)  # 100 reranking requests per minute
     def _rerank_results(self, merged_results: List[Dict], query_text: str, top_k: int) -> List[Dict]:
         """
@@ -512,6 +515,7 @@ class SearchService:
         deduplicated_results.sort(key=lambda x: x.get('score', 0), reverse=True)
         return deduplicated_results[:top_k]
     
+    @with_retry()
     @rate_limited(1000, 60)
     def delete_vectors(self, vector_ids: List[str]) -> int:
         """
@@ -532,6 +536,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to delete vectors: {e}")
     
+    @with_retry()
     @rate_limited(1000, 60)
     def delete_by_metadata(self, filter_dict: Dict[str, Any]) -> int:
         """
@@ -552,6 +557,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to delete vectors by metadata: {e}")
     
+    @with_retry()
     def get_index_stats(self) -> Dict[str, Any]:
         """
         Get statistics from both indexes.
@@ -584,6 +590,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to get index stats: {e}")
     
+    @with_retry()
     def get_detailed_index_stats(self) -> Dict[str, Any]:
         """
         Get detailed statistics from both indexes for debugging.
@@ -610,6 +617,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to get detailed index stats: {e}")
     
+    @with_retry()
     def get_index_metadata(self) -> Optional[Dict[str, Any]]:
         """
         Get index metadata from both indexes.
@@ -669,6 +677,7 @@ class SearchService:
             # If metadata doesn't exist, return None
             return None
     
+    @with_retry()
     def get_index_models(self) -> Dict[str, str]:
         """
         Get the actual model names from both indexes.
@@ -696,6 +705,7 @@ class SearchService:
                 'sparse_model': 'pinecone-sparse-english-v0'
             }
     
+    @with_retry()
     def update_index_metadata(self, metadata: Dict[str, Any]) -> bool:
         """
         Update index metadata in both indexes.
@@ -725,6 +735,7 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to update index metadata: {e}")
     
+    @with_retry()
     def cleanup_deleted_files(self, existing_file_ids: List[str]) -> int:
         """
         Remove vectors for files that no longer exist in Google Drive.
@@ -752,46 +763,100 @@ class SearchService:
         except Exception as e:
             raise DocumentProcessingError(f"Failed to cleanup deleted files: {e}")
     
-    def list_file_ids(self) -> List[str]:
-        """
-        Get list of all file IDs in the index.
-        
-        Returns:
-            List of unique file IDs
-        """
-        try:
-            # Use a query to get all vectors and extract file IDs from their metadata
-            # We'll use a dummy vector and a large top_k to get as many results as possible
-            response = self.dense_index.query(
-                vector=[0.0] * 1024,  # Dummy vector for query
-                top_k=10000,  # Get a large number of results
-                include_metadata=True
-            )
-            
-            file_ids = set()
-            
-            # Extract hits from the response
-            if hasattr(response, 'matches'):
-                hits = response.matches
-            elif hasattr(response, 'result') and response.result:
-                hits = response.result.hits if hasattr(response.result, 'hits') else []
-            elif hasattr(response, 'hits'):
-                hits = response.hits
+    def list_file_ids(self, batch_size: int = 500) -> List[str]:
+        """Return unique file IDs currently stored in the dense index metadata."""
+
+        def _extract_vector_ids(list_response: Any) -> List[str]:
+            if list_response is None:
+                return []
+
+            if hasattr(list_response, 'vector_ids'):
+                vector_ids = list_response.vector_ids  # type: ignore[attr-defined]
+            elif isinstance(list_response, dict):
+                vector_ids = list_response.get('vector_ids') or []
             else:
-                hits = []
-            
-            # Extract file IDs from metadata
-            for hit in hits:
-                metadata = hit.get('metadata', {})
-                file_id = metadata.get('file_id')
-                if file_id:
+                vector_ids = []
+
+            # Some SDK responses use tuples instead of lists
+            return list(vector_ids)
+
+        def _extract_next_token(list_response: Any) -> Optional[str]:
+            if list_response is None:
+                return None
+
+            if hasattr(list_response, 'pagination_token'):
+                return list_response.pagination_token  # type: ignore[attr-defined]
+            if isinstance(list_response, dict):
+                return list_response.get('pagination_token')
+            return None
+
+        def _iter_vectors(fetch_response: Any) -> Iterator[Dict[str, Any]]:
+            if fetch_response is None:
+                return iter(())
+
+            if hasattr(fetch_response, 'vectors'):
+                vectors = fetch_response.vectors  # type: ignore[attr-defined]
+            elif isinstance(fetch_response, dict):
+                vectors = fetch_response.get('vectors', {})
+            else:
+                vectors = {}
+
+            if isinstance(vectors, dict):
+                return (v for v in vectors.values())
+
+            # Some SDKs return a list of vector objects
+            if isinstance(vectors, (list, tuple)):
+                return iter(vectors)
+
+            return iter(())
+
+        file_ids: Set[str] = set()
+        pagination_token: Optional[str] = None
+
+        try:
+            while True:
+                list_resp = self.dense_index.list(  # type: ignore[attr-defined]
+                    namespace="__default__",
+                    limit=batch_size,
+                    pagination_token=pagination_token
+                )
+
+                vector_ids = [vid for vid in _extract_vector_ids(list_resp) if vid != '__index_metadata__']
+                if not vector_ids:
+                    pagination_token = _extract_next_token(list_resp)
+                    if not pagination_token:
+                        break
+                    continue
+
+                fetch_resp = self.dense_index.fetch(  # type: ignore[attr-defined]
+                    ids=vector_ids,
+                    namespace="__default__"
+                )
+
+                for vector in _iter_vectors(fetch_resp):
+                    metadata = None
+                    if hasattr(vector, 'metadata'):
+                        metadata = vector.metadata  # type: ignore[attr-defined]
+                    elif isinstance(vector, dict):
+                        metadata = vector.get('metadata')
+
+                    if not isinstance(metadata, dict):
+                        continue
+
+                    file_id = metadata.get('file_id')
+                    if not file_id or file_id == '__index_metadata__':
+                        continue
+
                     file_ids.add(file_id)
-            
+
+                pagination_token = _extract_next_token(list_resp)
+                if not pagination_token:
+                    break
+
             return list(file_ids)
-            
-        except Exception as e:
-            # If the query approach fails, return an empty list
-            # This means the refresh command will rely on the last_refresh_time from metadata
+
+        except Exception:
+            # If enumeration fails, fall back to empty list so cleanup becomes a no-op.
             return []
     
     def validate_metadata_size(self, metadata: Dict[str, Any]) -> Tuple[bool, int]:
